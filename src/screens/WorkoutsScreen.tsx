@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,33 +7,39 @@ import {
   FlatList,
   Alert,
 } from 'react-native';
-import { Routine, UserRoutine } from '../types';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { UserRoutine } from '../types';
+import { getUserRoutines } from '../data/storage';
+import { ROUTINES } from '../data/routines';
 import { colors, spacing, typography } from '../theme';
+import { userRoutineToRoutine } from '../utils/routines';
+import { WorkoutsStackParamList } from '../navigation/types';
 
-type Props = {
-  routines: Routine[];
-  userRoutineIds: string[];
-  userRoutinesMap: Record<string, UserRoutine>;
-  onSelectRoutine: (routine: Routine, isDeletable: boolean) => void;
-  onCreateRoutine: () => void;
-  onEditRoutine: (routine: UserRoutine) => void;
-};
+type WorkoutsNavProp = NativeStackNavigationProp<WorkoutsStackParamList, 'Workouts'>;
 
-export default function WorkoutsScreen({
-  routines,
-  userRoutineIds,
-  userRoutinesMap,
-  onSelectRoutine,
-  onCreateRoutine,
-  onEditRoutine,
-}: Props) {
-  function handleLongPress(routine: Routine) {
-    if (!userRoutineIds.includes(routine.id)) return;
-    Alert.alert(routine.name, undefined, [
+export default function WorkoutsScreen() {
+  const navigation = useNavigation<WorkoutsNavProp>();
+  const [userRoutines, setUserRoutines] = useState<UserRoutine[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      getUserRoutines().then(setUserRoutines);
+    }, [])
+  );
+
+  const allRoutines = [...ROUTINES, ...userRoutines.map(userRoutineToRoutine)];
+  const userRoutineIds = userRoutines.map((r) => r.id);
+  const userRoutinesMap = Object.fromEntries(userRoutines.map((r) => [r.id, r]));
+
+  function handleLongPress(routineId: string, routineName: string) {
+    if (!userRoutineIds.includes(routineId)) return;
+    Alert.alert(routineName, undefined, [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Editar',
-        onPress: () => onEditRoutine(userRoutinesMap[routine.id]),
+        onPress: () =>
+          navigation.navigate('CreateRoutine', { editingRoutine: userRoutinesMap[routineId] }),
       },
     ]);
   }
@@ -44,14 +50,19 @@ export default function WorkoutsScreen({
       <Text style={styles.subheader}>Escolha uma rotina</Text>
 
       <FlatList
-        data={routines}
+        data={allRoutines}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.card}
-            onPress={() => onSelectRoutine(item, userRoutineIds.includes(item.id))}
-            onLongPress={() => handleLongPress(item)}
+            onPress={() =>
+              navigation.navigate('Workout', {
+                routine: item,
+                deletable: userRoutineIds.includes(item.id),
+              })
+            }
+            onLongPress={() => handleLongPress(item.id, item.name)}
           >
             <View style={styles.cardLeft}>
               <Text style={styles.cardTitle}>{item.name}</Text>
@@ -64,7 +75,10 @@ export default function WorkoutsScreen({
           </TouchableOpacity>
         )}
         ListFooterComponent={
-          <TouchableOpacity style={styles.createButton} onPress={onCreateRoutine}>
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => navigation.navigate('CreateRoutine', {})}
+          >
             <Text style={styles.createButtonText}>+ Novo treino</Text>
           </TouchableOpacity>
         }

@@ -13,20 +13,23 @@ import {
   Platform,
   Keyboard,
 } from 'react-native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { UserRoutine, UserRoutineExercise, RoutineSet, ExerciseTemplate } from '../types';
 import { saveUserRoutine, updateUserRoutine } from '../data/storage';
 import { EXERCISES, MUSCLE_GROUPS, searchExercises } from '../data/exercises';
 import { colors, spacing, typography } from '../theme';
+import { HomeStackParamList } from '../navigation/types';
 
-type Props = {
-  editingRoutine: UserRoutine | null;
-  onBack: () => void;
-  onSaved: () => void;
-};
+type CreateRoutineRoute = RouteProp<{ CreateRoutine: { editingRoutine?: UserRoutine } }, 'CreateRoutine'>;
 
 const DEFAULT_SET: RoutineSet = { weight: 0, reps: 10, restSeconds: 90 };
 
-export default function CreateRoutineScreen({ editingRoutine, onBack, onSaved }: Props) {
+export default function CreateRoutineScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+  const route = useRoute<CreateRoutineRoute>();
+  const editingRoutine = route.params?.editingRoutine ?? null;
+
   const [name, setName] = useState(editingRoutine?.name ?? '');
   const [subtitle, setSubtitle] = useState(editingRoutine?.subtitle ?? '');
   const [exercises, setExercises] = useState<UserRoutineExercise[]>(
@@ -122,14 +125,16 @@ export default function CreateRoutineScreen({ editingRoutine, onBack, onSaved }:
       return;
     }
 
+    const autoSubtitle = subtitle.trim() || [...new Set(exercises.map((e) => {
+      const template = EXERCISES.find((t) => t.id === e.exerciseTemplateId);
+      return template?.muscleGroup ?? '';
+    }).filter(Boolean))].slice(0, 3).join(' · ');
+
     if (isEditing && editingRoutine) {
       const updated: UserRoutine = {
         ...editingRoutine,
         name: name.trim(),
-        subtitle: subtitle.trim() || [...new Set(exercises.map((e) => {
-          const template = EXERCISES.find((t) => t.id === e.exerciseTemplateId);
-          return template?.muscleGroup ?? '';
-        }).filter(Boolean))].slice(0, 3).join(' · '),
+        subtitle: autoSubtitle,
         exercises,
       };
       await updateUserRoutine(updated);
@@ -137,22 +142,19 @@ export default function CreateRoutineScreen({ editingRoutine, onBack, onSaved }:
       const routine: UserRoutine = {
         id: Date.now().toString(),
         name: name.trim(),
-        subtitle: subtitle.trim() || [...new Set(exercises.map((e) => {
-          const template = EXERCISES.find((t) => t.id === e.exerciseTemplateId);
-          return template?.muscleGroup ?? '';
-        }).filter(Boolean))].slice(0, 3).join(' · '),
+        subtitle: autoSubtitle,
         exercises,
         createdAt: new Date().toISOString(),
       };
       await saveUserRoutine(routine);
     }
-    onSaved();
+    navigation.goBack();
   }
 
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={onBack}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backButton}>← Voltar</Text>
         </TouchableOpacity>
         <Text style={styles.screenTitle}>{isEditing ? 'Editar treino' : 'Novo treino'}</Text>

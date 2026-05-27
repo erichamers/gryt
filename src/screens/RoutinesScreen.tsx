@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,20 +6,21 @@ import {
   View,
   FlatList,
 } from 'react-native';
-import { Routine, UserRoutine, WorkoutSession } from '../types';
-import { getActiveWorkout, getSessions, getWorkloadMetrics, WorkloadMetrics } from '../data/storage';
+import { useFocusEffect, useNavigation, CompositeNavigationProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { UserRoutine, WorkoutSession } from '../types';
+import { getActiveWorkout, getSessions, getWorkloadMetrics, getUserRoutines, WorkloadMetrics } from '../data/storage';
+import { ROUTINES } from '../data/routines';
 import { colors, spacing, typography } from '../theme';
+import { userRoutineToRoutine } from '../utils/routines';
+import { HomeStackParamList } from '../navigation/types';
+import { RootTabParamList } from '../navigation/types';
 
-type Props = {
-  routines: Routine[];
-  userRoutineIds: string[];
-  userRoutinesMap: Record<string, UserRoutine>;
-  onSelectRoutine: (routine: Routine, isDeletable: boolean) => void;
-  onOpenSessionDetail: (session: WorkoutSession) => void;
-  onResumeWorkout: () => void;
-  onCreateRoutine: () => void;
-  onEditRoutine: (routine: UserRoutine) => void;
-};
+type RoutinesNavProp = CompositeNavigationProp<
+  NativeStackNavigationProp<HomeStackParamList, 'Routines'>,
+  BottomTabNavigationProp<RootTabParamList>
+>;
 
 function formatDate(iso: string): string {
   const date = new Date(iso);
@@ -50,29 +51,40 @@ function getRatioStatus(ratio: number): { label: string; color: string } {
   return { label: 'Risco', color: colors.danger };
 }
 
-export default function RoutinesScreen({
-  routines,
-  userRoutineIds,
-  userRoutinesMap,
-  onSelectRoutine,
-  onOpenSessionDetail,
-  onResumeWorkout,
-  onCreateRoutine,
-  onEditRoutine,
-}: Props) {
+export default function RoutinesScreen() {
+  const navigation = useNavigation<RoutinesNavProp>();
   const [activeRoutineId, setActiveRoutineId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [metrics, setMetrics] = useState<WorkloadMetrics | null>(null);
+  const [userRoutines, setUserRoutines] = useState<UserRoutine[]>([]);
 
-  useEffect(() => {
-    getActiveWorkout().then((workout) => {
-      if (workout) setActiveRoutineId(workout.routineId);
-    });
-    getSessions().then(setSessions);
-    getWorkloadMetrics().then(setMetrics);
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      getUserRoutines().then(setUserRoutines);
+      getActiveWorkout().then((workout) => {
+        setActiveRoutineId(workout ? workout.routineId : null);
+      });
+      getSessions().then(setSessions);
+      getWorkloadMetrics().then(setMetrics);
+    }, [])
+  );
 
+  const allRoutines = [...ROUTINES, ...userRoutines.map(userRoutineToRoutine)];
   const ratioStatus = metrics ? getRatioStatus(metrics.ratio) : null;
+
+  async function handleResumeWorkout() {
+    const active = await getActiveWorkout();
+    if (!active) return;
+    const hardcoded = ROUTINES.find((r) => r.id === active.routineId);
+    if (hardcoded) {
+      navigation.navigate('Workout', { routine: hardcoded, deletable: false });
+      return;
+    }
+    const user = userRoutines.find((r) => r.id === active.routineId);
+    if (user) {
+      navigation.navigate('Workout', { routine: userRoutineToRoutine(user), deletable: true });
+    }
+  }
 
   return (
     <View style={styles.container}>
@@ -119,11 +131,11 @@ export default function RoutinesScreen({
             )}
 
             {activeRoutineId && (
-              <TouchableOpacity style={styles.resumeBanner} onPress={onResumeWorkout}>
+              <TouchableOpacity style={styles.resumeBanner} onPress={handleResumeWorkout}>
                 <View>
                   <Text style={styles.resumeTitle}>Treino em andamento</Text>
                   <Text style={styles.resumeSubtitle}>
-                    {routines.find((r) => r.id === activeRoutineId)?.name} · Toque para retomar
+                    {allRoutines.find((r) => r.id === activeRoutineId)?.name} · Toque para retomar
                   </Text>
                 </View>
                 <Text style={styles.resumeArrow}>→</Text>
@@ -145,7 +157,12 @@ export default function RoutinesScreen({
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.sessionCard}
-            onPress={() => onOpenSessionDetail(item)}
+            onPress={() =>
+              navigation.navigate('HistoryTab', {
+                screen: 'SessionDetail',
+                params: { session: item },
+              })
+            }
           >
             <View style={styles.sessionTop}>
               <Text style={styles.sessionName}>{item.routineName}</Text>

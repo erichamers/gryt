@@ -12,19 +12,26 @@ import {
   Modal,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { Routine, WorkoutExercise, CompletedSet, WorkoutSession, UserRoutine } from '../types';
-import { saveSession, getLastSession, saveActiveWorkout, clearActiveWorkout, getActiveWorkout, getUserRoutines, updateUserRoutine } from '../data/storage';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Routine, WorkoutExercise, CompletedSet, WorkoutSession } from '../types';
+import {
+  saveSession,
+  getLastSession,
+  saveActiveWorkout,
+  clearActiveWorkout,
+  getActiveWorkout,
+  getUserRoutines,
+  updateUserRoutine,
+  deleteUserRoutine,
+} from '../data/storage';
 import { colors, spacing, typography } from '../theme';
 import { requestNotificationPermission, scheduleRestNotification, cancelRestNotification } from '../data/notifications';
 import Slider from '@react-native-community/slider';
+import { HomeStackParamList } from '../navigation/types';
 
-type Props = {
-  routine: Routine;
-  deletable: boolean;
-  onFinish: () => void;
-  onBack: () => void;
-  onDelete: () => void;
-};
+type WorkoutRouteParams = { routine: Routine; deletable: boolean };
+type WorkoutRoute = RouteProp<{ Workout: WorkoutRouteParams }, 'Workout'>;
 
 function initWorkout(routine: Routine): WorkoutExercise[] {
   return routine.exercises.map((exercise) => ({
@@ -57,7 +64,11 @@ const RPE_LABELS: Record<number, string> = {
   10: 'Máximo absoluto',
 };
 
-export default function WorkoutScreen({ routine, deletable, onFinish, onBack, onDelete }: Props) {
+export default function WorkoutScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+  const route = useRoute<WorkoutRoute>();
+  const { routine, deletable } = route.params;
+
   const [started, setStarted] = useState(false);
   const [exercises, setExercises] = useState<WorkoutExercise[]>(initWorkout(routine));
   const [lastSession, setLastSession] = useState<WorkoutSession | null>(null);
@@ -256,7 +267,7 @@ export default function WorkoutScreen({ routine, deletable, onFinish, onBack, on
     const userRoutines = await getUserRoutines();
     const existing = userRoutines.find((r) => r.id === routine.id);
     if (!existing) return;
-    const updated: UserRoutine = {
+    const updated = {
       ...existing,
       exercises: exercises.map((ex) => ({
         exerciseTemplateId: ex.exercise.id,
@@ -276,7 +287,14 @@ export default function WorkoutScreen({ routine, deletable, onFinish, onBack, on
   function handleDelete() {
     Alert.alert('Deletar treino?', 'Essa ação não pode ser desfeita.', [
       { text: 'Cancelar', style: 'cancel' },
-      { text: 'Deletar', style: 'destructive', onPress: onDelete },
+      {
+        text: 'Deletar',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteUserRoutine(routine.id);
+          navigation.goBack();
+        },
+      },
     ]);
   }
 
@@ -289,7 +307,7 @@ export default function WorkoutScreen({ routine, deletable, onFinish, onBack, on
         onPress: async () => {
           await cancelRestNotification();
           await clearActiveWorkout();
-          onFinish();
+          navigation.goBack();
         },
       },
       {
@@ -313,7 +331,7 @@ export default function WorkoutScreen({ routine, deletable, onFinish, onBack, on
     await cancelRestNotification();
     await clearActiveWorkout();
     setShowRPEModal(false);
-    onFinish();
+    navigation.goBack();
   }
 
   const restProgress = restSeconds !== null && restTotal > 0 ? restSeconds / restTotal : 0;
