@@ -1,6 +1,7 @@
 {
   "expo": {
     "name": "gryt",
+    "scheme": "com.erichamers.gryt",
     "slug": "gryt",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,7 +11,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true,
@@ -45,7 +46,8 @@
           "color": "#4ade80"
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {

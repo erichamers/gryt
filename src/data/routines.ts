@@ -7,7 +7,7 @@ export const ROUTINES: Routine[] = [
     subtitle: 'Largura + Peito',
     exercises: [
       {
-        id: 'a-1',
+        id: 'ex-014',
         name: 'Lat Pulldown (Cable)',
         sets: 3,
         reps: '10',
@@ -16,7 +16,7 @@ export const ROUTINES: Routine[] = [
         notes: 'Peito aberto, puxar cotovelos para baixo',
       },
       {
-        id: 'a-2',
+        id: 'ex-001',
         name: 'Bench Press (Barbell)',
         sets: 3,
         reps: '6',
@@ -25,7 +25,7 @@ export const ROUTINES: Routine[] = [
         notes: 'Escápula retraída, barra no meio do peito',
       },
       {
-        id: 'a-3',
+        id: 'ex-016',
         name: 'Pendlay Row (Barbell)',
         sets: 3,
         reps: '8',
@@ -34,7 +34,7 @@ export const ROUTINES: Routine[] = [
         notes: 'Puxar para umbigo',
       },
       {
-        id: 'a-4',
+        id: 'ex-005',
         name: 'Incline Bench Press (Dumbbell)',
         sets: 3,
         reps: '8-10',
@@ -42,7 +42,7 @@ export const ROUTINES: Routine[] = [
         restSeconds: 90,
       },
       {
-        id: 'a-5',
+        id: 'ex-030',
         name: 'Lateral Raise (Dumbbell)',
         sets: 3,
         reps: '15',
@@ -50,7 +50,7 @@ export const ROUTINES: Routine[] = [
         restSeconds: 60,
       },
       {
-        id: 'a-6',
+        id: 'ex-048',
         name: 'Triceps Pushdown',
         sets: 2,
         reps: '10',
@@ -58,7 +58,7 @@ export const ROUTINES: Routine[] = [
         restSeconds: 90,
       },
       {
-        id: 'a-7',
+        id: 'ex-039',
         name: 'Bicep Curl (Barbell)',
         sets: 2,
         reps: '10',
@@ -73,7 +73,7 @@ export const ROUTINES: Routine[] = [
     subtitle: 'Costas + Braço',
     exercises: [
       {
-        id: 'b-1',
+        id: 'ex-021',
         name: 'Romanian Deadlift (Barbell)',
         sets: 3,
         reps: '6',
@@ -81,7 +81,7 @@ export const ROUTINES: Routine[] = [
         restSeconds: 150,
       },
       {
-        id: 'b-2',
+        id: 'ex-014',
         name: 'Lat Pulldown (Cable)',
         sets: 3,
         reps: '10',
@@ -89,7 +89,7 @@ export const ROUTINES: Routine[] = [
         restSeconds: 105,
       },
       {
-        id: 'b-3',
+        id: 'ex-017',
         name: 'Dumbbell Row',
         sets: 3,
         reps: '10',
@@ -97,7 +97,7 @@ export const ROUTINES: Routine[] = [
         restSeconds: 90,
       },
       {
-        id: 'b-4',
+        id: 'ex-039',
         name: 'Bicep Curl (Barbell)',
         sets: 3,
         reps: '10',
@@ -105,7 +105,7 @@ export const ROUTINES: Routine[] = [
         restSeconds: 90,
       },
       {
-        id: 'b-5',
+        id: 'ex-048',
         name: 'Triceps Pushdown',
         sets: 3,
         reps: '8-10',
@@ -113,7 +113,7 @@ export const ROUTINES: Routine[] = [
         restSeconds: 75,
       },
       {
-        id: 'b-6',
+        id: 'ex-009',
         name: 'Butterfly (Pec Deck)',
         sets: 2,
         reps: '10-12',
@@ -121,7 +121,7 @@ export const ROUTINES: Routine[] = [
         restSeconds: 75,
       },
       {
-        id: 'b-7',
+        id: 'ex-070',
         name: 'Seated Leg Curl (Machine)',
         sets: 2,
         reps: '15',
@@ -129,7 +129,7 @@ export const ROUTINES: Routine[] = [
         restSeconds: 60,
       },
       {
-        id: 'b-8',
+        id: 'ex-080',
         name: 'Hip Abduction (Machine)',
         sets: 2,
         reps: '20',
@@ -144,7 +144,7 @@ export const ROUTINES: Routine[] = [
     subtitle: 'Ombro + Braço',
     exercises: [
       {
-        id: 'c-1',
+        id: 'ex-029',
         name: 'Seated Overhead Press (Dumbbell)',
         sets: 3,
         reps: '6-8',
@@ -152,7 +152,7 @@ export const ROUTINES: Routine[] = [
         restSeconds: 120,
       },
       {
-        id: 'c-2',
+        id: 'ex-014',
         name: 'Lat Pulldown (Cable)',
         sets: 3,
         reps: '8-10',
@@ -160,7 +160,7 @@ export const ROUTINES: Routine[] = [
         restSeconds: 90,
       },
       {
-        id: 'c-3',
+        id: 'ex-005',
         name: 'Incline Bench Press (Dumbbell)',
         sets: 3,
         reps: '8-10',
@@ -168,7 +168,7 @@ export const ROUTINES: Routine[] = [
         restSeconds: 90,
       },
       {
-        id: 'c-4',
+        id: 'ex-030',
         name: 'Lateral Raise (Dumbbell)',
         sets: 2,
         reps: '12-15',
@@ -176,7 +176,7 @@ export const ROUTINES: Routine[] = [
         restSeconds: 60,
       },
       {
-        id: 'c-5',
+        id: 'ex-042',
         name: 'Hammer Curl (Dumbbell)',
         sets: 3,
         reps: '10',
@@ -184,7 +184,7 @@ export const ROUTINES: Routine[] = [
         restSeconds: 75,
       },
       {
-        id: 'c-6',
+        id: 'ex-049',
         name: 'Triceps Rope Pushdown',
         sets: 3,
         reps: '10',
@@ -192,7 +192,7 @@ export const ROUTINES: Routine[] = [
         restSeconds: 75,
       },
       {
-        id: 'c-7',
+        id: 'ex-038',
         name: 'Abdução Unilateral No Cabo',
         sets: 3,
         reps: '12-15',

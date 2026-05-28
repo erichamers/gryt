@@ -11,9 +11,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { UserRoutine } from '../types';
 import { getUserRoutines } from '../data/storage';
-import { ROUTINES } from '../data/routines';
 import { colors, spacing, typography } from '../theme';
-import { userRoutineToRoutine } from '../utils/routines';
 import { WorkoutsStackParamList } from '../navigation/types';
 
 type WorkoutsNavProp = NativeStackNavigationProp<WorkoutsStackParamList, 'Workouts'>;
@@ -28,18 +26,18 @@ export default function WorkoutsScreen() {
     }, [])
   );
 
-  const allRoutines = [...ROUTINES, ...userRoutines.map(userRoutineToRoutine)];
-  const userRoutineIds = userRoutines.map((r) => r.id);
+  const allRoutines = userRoutines;
   const userRoutinesMap = Object.fromEntries(userRoutines.map((r) => [r.id, r]));
 
   function handleLongPress(routineId: string, routineName: string) {
-    if (!userRoutineIds.includes(routineId)) return;
+    const routine = userRoutinesMap[routineId];
+    if (!routine) return;
     Alert.alert(routineName, undefined, [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Editar',
         onPress: () =>
-          navigation.navigate('CreateRoutine', { editingRoutine: userRoutinesMap[routineId] }),
+          navigation.navigate('CreateRoutine', { editingRoutine: routine }),
       },
     ]);
   }
@@ -47,7 +45,7 @@ export default function WorkoutsScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Treinos</Text>
-      <Text style={styles.subheader}>Escolha uma rotina</Text>
+      <Text style={styles.subheader}>Qualo treino de hoje?</Text>
 
       <FlatList
         data={allRoutines}
@@ -59,7 +57,7 @@ export default function WorkoutsScreen() {
             onPress={() =>
               navigation.navigate('Workout', {
                 routine: item,
-                deletable: userRoutineIds.includes(item.id),
+                deletable: true,
               })
             }
             onLongPress={() => handleLongPress(item.id, item.name)}
@@ -99,7 +97,7 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.textSubtle,
     marginTop: 2,
-    marginBottom: spacing.xxl,
+    marginBottom: spacing.md,
   },
   card: {
     backgroundColor: colors.surface,

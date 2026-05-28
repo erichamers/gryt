@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Background -->
+  <rect width="1024" height="1024" fill="#000000" rx="224"/>
+  <!-- G -->
+  <text
+    x="512"
+    y="720"
+    font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif"
+    font-size="680"
+    font-weight="900"
+    letter-spacing="-20"
+    text-anchor="middle"
+    fill="#3DFF5C"
+  >G</text>
+  <!-- white bar -->
+  <rect x="362" y="750" width="300" height="22" rx="11" fill="#FFFFFF"/>
+</svg>

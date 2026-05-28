@@ -3,6 +3,7 @@ import { HomeStackParamList } from './types';
 import RoutinesScreen from '../screens/RoutinesScreen';
 import WorkoutScreen from '../screens/WorkoutScreen';
 import CreateRoutineScreen from '../screens/CreateRoutineScreen';
+import SessionDetailScreen from '../screens/SessionDetailScreen';
 
 const Stack = createNativeStackNavigator<HomeStackParamList>();
 
@@ -12,6 +13,7 @@ export default function HomeStack() {
       <Stack.Screen name="Routines" component={RoutinesScreen} />
       <Stack.Screen name="Workout" component={WorkoutScreen} />
       <Stack.Screen name="CreateRoutine" component={CreateRoutineScreen} />
+      <Stack.Screen name="SessionDetail" component={SessionDetailScreen} />
     </Stack.Navigator>
   );
 }

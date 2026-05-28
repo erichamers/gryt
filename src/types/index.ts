@@ -6,6 +6,7 @@ export type Exercise = {
   weight: number;
   restSeconds: number;
   notes?: string;
+  unit?: 'kg' | 'lbs';
 };
 
 export type Routine = {
@@ -20,6 +21,7 @@ export type CompletedSet = {
   weight: number;
   reps: number;
   completed: boolean;
+  unit?: 'kg' | 'lbs';
 };
 
 export type WorkoutExercise = {
@@ -43,6 +45,7 @@ export type ExerciseTemplate = {
   aliases: string[];
   muscleGroup: MuscleGroup;
   equipment: Equipment;
+  imageUrl?: string;
 };
 
 export type MuscleGroup =

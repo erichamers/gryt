@@ -1,21 +1,21 @@
-import { useState, useCallback } from 'react';
-import {
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  FlatList,
-} from 'react-native';
+import { useState, useCallback, useEffect } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View, FlatList, Alert } from 'react-native';
 import { useFocusEffect, useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { UserRoutine, WorkoutSession } from '../types';
-import { getActiveWorkout, getSessions, getWorkloadMetrics, getUserRoutines, WorkloadMetrics } from '../data/storage';
-import { ROUTINES } from '../data/routines';
+import {
+  getActiveWorkout,
+  getSessions,
+  getWorkloadMetrics,
+  getUserRoutines,
+  WorkloadMetrics,
+} from '../data/storage';
 import { colors, spacing, typography } from '../theme';
 import { userRoutineToRoutine } from '../utils/routines';
 import { HomeStackParamList } from '../navigation/types';
 import { RootTabParamList } from '../navigation/types';
+import Svg, { Text as SvgText, TSpan } from 'react-native-svg';
 
 type RoutinesNavProp = CompositeNavigationProp<
   NativeStackNavigationProp<HomeStackParamList, 'Routines'>,
@@ -38,9 +38,9 @@ function formatDuration(seconds: number): string {
 
 function totalVolume(session: WorkoutSession): number {
   return session.exercises.reduce((acc, ex) => {
-    return acc + ex.completedSets
-      .filter((s) => s.completed)
-      .reduce((a, s) => a + s.weight * s.reps, 0);
+    return (
+      acc + ex.completedSets.filter((s) => s.completed).reduce((a, s) => a + s.weight * s.reps, 0)
+    );
   }, 0);
 }
 
@@ -58,28 +58,23 @@ export default function RoutinesScreen() {
   const [metrics, setMetrics] = useState<WorkloadMetrics | null>(null);
   const [userRoutines, setUserRoutines] = useState<UserRoutine[]>([]);
 
-  useFocusEffect(
-    useCallback(() => {
-      getUserRoutines().then(setUserRoutines);
-      getActiveWorkout().then((workout) => {
-        setActiveRoutineId(workout ? workout.routineId : null);
-      });
-      getSessions().then(setSessions);
-      getWorkloadMetrics().then(setMetrics);
-    }, [])
-  );
+  useEffect(() => {
+    getUserRoutines().then(setUserRoutines);
+    getActiveWorkout().then((workout) => {
+      setActiveRoutineId(workout ? workout.routineId : null);
+    });
+    getSessions().then(setSessions);
+    getWorkloadMetrics().then((m) => {
+      setMetrics(m);
+    });
+  }, []);
 
-  const allRoutines = [...ROUTINES, ...userRoutines.map(userRoutineToRoutine)];
+  const allRoutines = userRoutines.map(userRoutineToRoutine);
   const ratioStatus = metrics ? getRatioStatus(metrics.ratio) : null;
 
   async function handleResumeWorkout() {
     const active = await getActiveWorkout();
     if (!active) return;
-    const hardcoded = ROUTINES.find((r) => r.id === active.routineId);
-    if (hardcoded) {
-      navigation.navigate('Workout', { routine: hardcoded, deletable: false });
-      return;
-    }
     const user = userRoutines.find((r) => r.id === active.routineId);
     if (user) {
       navigation.navigate('Workout', { routine: userRoutineToRoutine(user), deletable: true });
@@ -96,7 +91,21 @@ export default function RoutinesScreen() {
           <>
             <View style={styles.header}>
               <View>
-                <Text style={styles.logo}>GRYT</Text>
+                <Svg width={160} height={45} viewBox="0 0 320 90">
+                  <SvgText
+                    x="0"
+                    y="80"
+                    fontFamily="Arial Black, Helvetica Neue, Arial, sans-serif"
+                    fontSize="96"
+                    fontWeight="900"
+                    letterSpacing="-3"
+                    fill="#FFFFFF"
+                  >
+                    {'GR'}
+                    <TSpan fill="#3DFF5C">Y</TSpan>
+                    {'T'}
+                  </SvgText>
+                </Svg>
                 <Text style={styles.tagline}>Treine com propósito</Text>
               </View>
             </View>
@@ -112,18 +121,55 @@ export default function RoutinesScreen() {
                   </View>
                   <View style={styles.metricDivider} />
                   <View style={styles.metricItem}>
-                    <Text style={styles.metricValue}>{metrics.chronicLoad}</Text>
+                    <View style={styles.ratioValueRow}>
+                      <Text
+                        style={[
+                          styles.metricValue,
+                          metrics.ratio === 0 && { color: colors.textSubtle },
+                        ]}
+                      >
+                        {metrics.ratio > 0 ? metrics.chronicLoad : '—'}
+                      </Text>
+                      {metrics.ratio === 0 && (
+                        <TouchableOpacity
+                          onPress={() =>
+                            Alert.alert(
+                              'Carga Crônica',
+                              'Disponível após treinos registrados em pelo menos 2 semanas diferentes.'
+                            )
+                          }
+                          style={styles.infoButton}
+                        >
+                          <Text style={styles.infoButtonText}>i</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                     <Text style={styles.metricLabel}>Carga crônica</Text>
                     <Text style={styles.metricSub}>28 dias</Text>
                   </View>
                   <View style={styles.metricDivider} />
                   <View style={styles.metricItem}>
-                    <Text style={[styles.metricValue, { color: ratioStatus?.color }]}>
-                      {metrics.ratio > 0 ? metrics.ratio.toFixed(2) : '—'}
-                    </Text>
+                    <View style={styles.ratioValueRow}>
+                      <Text style={[styles.metricValue, { color: ratioStatus?.color }]}>
+                        {metrics.ratio > 0 ? metrics.ratio.toFixed(2) : '—'}
+                      </Text>
+                      {metrics.ratio === 0 && (
+                        <TouchableOpacity
+                          onPress={() =>
+                            Alert.alert(
+                              'Razão de Carga',
+                              'Disponível após treinos registrados em pelo menos 2 semanas diferentes.'
+                            )
+                          }
+                          style={styles.infoButton}
+                        >
+                          <Text style={styles.infoButtonText}>i</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                     <Text style={styles.metricLabel}>Razão</Text>
                     <Text style={[styles.metricSub, { color: ratioStatus?.color }]}>
-                      {ratioStatus?.label}
+                      {metrics.ratio > 0 ? ratioStatus?.label : ''}
                     </Text>
                   </View>
                 </View>
@@ -142,14 +188,14 @@ export default function RoutinesScreen() {
               </TouchableOpacity>
             )}
 
-            {sessions.length > 0 && (
-              <Text style={styles.sectionTitle}>Atividade recente</Text>
-            )}
+            {sessions.length > 0 && <Text style={styles.sectionTitle}>Atividade recente</Text>}
 
             {sessions.length === 0 && (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyTitle}>Nenhum treino ainda</Text>
-                <Text style={styles.emptySubtitle}>Vá para Treinos e inicie sua primeira sessão</Text>
+                <Text style={styles.emptySubtitle}>
+                  Vá para Treinos e inicie sua primeira sessão
+                </Text>
               </View>
             )}
           </>
@@ -157,12 +203,7 @@ export default function RoutinesScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.sessionCard}
-            onPress={() =>
-              navigation.navigate('HistoryTab', {
-                screen: 'SessionDetail',
-                params: { session: item },
-              })
-            }
+            onPress={() => navigation.navigate('SessionDetail', { session: item })}
           >
             <View style={styles.sessionTop}>
               <Text style={styles.sessionName}>{item.routineName}</Text>
@@ -184,13 +225,11 @@ export default function RoutinesScreen() {
             <View style={styles.sessionExercises}>
               {item.exercises.slice(0, 3).map((ex, i) => (
                 <Text key={i} style={styles.sessionExercise}>
-                  {ex.completedSets.filter(s => s.completed).length} séries {ex.exercise.name}
+                  {ex.completedSets.filter((s) => s.completed).length} séries {ex.exercise.name}
                 </Text>
               ))}
               {item.exercises.length > 3 && (
-                <Text style={styles.sessionMore}>
-                  + {item.exercises.length - 3} exercícios
-                </Text>
+                <Text style={styles.sessionMore}>+ {item.exercises.length - 3} exercícios</Text>
               )}
             </View>
           </TouchableOpacity>
@@ -213,12 +252,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.screenTop,
     paddingHorizontal: spacing.screenHorizontal,
     marginBottom: spacing.xl,
-  },
-  logo: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: colors.text,
-    letterSpacing: 4,
   },
   tagline: {
     ...typography.small,
@@ -277,7 +310,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  resumeTitle: { ...typography.small, color: colors.primary, fontWeight: '600', marginBottom: spacing.xs },
+  resumeTitle: {
+    ...typography.small,
+    color: colors.primary,
+    fontWeight: '600',
+    marginBottom: spacing.xs,
+  },
   resumeSubtitle: { ...typography.small, color: colors.textSubtle },
   resumeArrow: { color: colors.primary, fontSize: 18 },
   sectionTitle: {
@@ -323,4 +361,25 @@ const styles = StyleSheet.create({
   sessionExercises: { gap: 4 },
   sessionExercise: { ...typography.small, color: colors.textSubtle },
   sessionMore: { ...typography.small, color: colors.textSubtle, fontStyle: 'italic', marginTop: 2 },
+  ratioValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  infoButton: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.textSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  infoButtonText: {
+    fontSize: 10,
+    color: colors.textSubtle,
+    fontWeight: '700',
+    lineHeight: 12,
+  },
 });

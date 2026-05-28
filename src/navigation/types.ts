@@ -1,15 +1,16 @@
 import { NavigatorScreenParams } from '@react-navigation/native';
-import { Routine, UserRoutine, WorkoutSession } from '../types';
+import { UserRoutine, WorkoutSession } from '../types';
 
 export type HomeStackParamList = {
   Routines: undefined;
-  Workout: { routine: Routine; deletable: boolean };
+  Workout: { routine: UserRoutine; deletable: boolean };
   CreateRoutine: { editingRoutine?: UserRoutine };
+  SessionDetail: { session: WorkoutSession };
 };
 
 export type WorkoutsStackParamList = {
   Workouts: undefined;
-  Workout: { routine: Routine; deletable: boolean };
+  Workout: { routine: UserRoutine; deletable: boolean };
   CreateRoutine: { editingRoutine?: UserRoutine };
 };
 

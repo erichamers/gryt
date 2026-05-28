@@ -16,6 +16,8 @@ import { WorkoutSession } from '../types';
 import { deleteSession, updateSession } from '../data/storage';
 import { colors, spacing, typography } from '../theme';
 import { HistoryStackParamList } from '../navigation/types';
+import { SwipeableRow } from '../components/SwipeableRow';
+import { EXERCISES } from '../data/exercises';
 
 type SessionDetailNavProp = NativeStackNavigationProp<HistoryStackParamList, 'SessionDetail'>;
 type SessionDetailRoute = RouteProp<HistoryStackParamList, 'SessionDetail'>;
@@ -35,19 +37,48 @@ function formatDuration(seconds: number): string {
   return `${m}m ${s}s`;
 }
 
-function totalVolume(session: WorkoutSession): number {
-  return session.exercises.reduce((acc, ex) => {
-    return acc + ex.completedSets
-      .filter((s) => s.completed)
-      .reduce((a, s) => a + s.weight * s.reps, 0);
-  }, 0);
+function totalVolume(session: WorkoutSession, units: Record<number, 'kg' | 'lbs'>): number {
+  return Math.round(
+    session.exercises.reduce((acc, ex, exerciseIndex) => {
+      const unit = units[exerciseIndex] ?? ex.completedSets[0]?.unit ?? 'kg';
+      return (
+        acc +
+        ex.completedSets
+          .filter((s) => s.completed)
+          .reduce((a, s) => {
+            const weightInKg = unit === 'lbs' ? s.weight * 0.453592 : s.weight;
+            return a + weightInKg * s.reps;
+          }, 0)
+      );
+    }, 0)
+  );
 }
 
 const RPE_LABELS: Record<number, string> = {
-  1: 'Muito leve', 2: 'Leve', 3: 'Moderado', 4: 'Um pouco difícil',
-  5: 'Difícil', 6: 'Difícil+', 7: 'Muito difícil', 8: 'Muito difícil+',
-  9: 'Máximo quase', 10: 'Máximo absoluto',
+  1: 'Muito leve',
+  2: 'Leve',
+  3: 'Moderado',
+  4: 'Um pouco difícil',
+  5: 'Difícil',
+  6: 'Difícil+',
+  7: 'Muito difícil',
+  8: 'Muito difícil+',
+  9: 'Máximo quase',
+  10: 'Máximo absoluto',
 };
+
+function seriesByMuscleGroup(session: WorkoutSession): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const ex of session.exercises) {
+    const template = EXERCISES.find((t) => t.id === ex.exercise.id);
+    const group = template?.muscleGroup ?? 'Outro';
+    const completedSets = ex.completedSets.filter((s) => s.completed).length;
+    if (completedSets > 0) {
+      result[group] = (result[group] ?? 0) + completedSets;
+    }
+  }
+  return result;
+}
 
 export default function SessionDetailScreen() {
   const navigation = useNavigation<SessionDetailNavProp>();
@@ -59,10 +90,37 @@ export default function SessionDetailScreen() {
   );
   const [showRPEModal, setShowRPEModal] = useState(false);
   const [tempRPE, setTempRPE] = useState(session.rpe ?? 5);
+  const [exerciseUnits, setExerciseUnits] = useState<Record<number, 'kg' | 'lbs'>>({});
 
   const isDirty = JSON.stringify(session) !== JSON.stringify(editedSession);
 
-  function updateEditedSet(exerciseIndex: number, setIndex: number, field: 'weight' | 'reps', value: string) {
+  function getUnit(exerciseIndex: number): 'kg' | 'lbs' {
+    return (
+      exerciseUnits[exerciseIndex] ??
+      editedSession.exercises[exerciseIndex]?.completedSets[0]?.unit ??
+      'kg'
+    );
+  }
+
+  function toggleUnit(exerciseIndex: number) {
+    const newUnit = getUnit(exerciseIndex) === 'kg' ? 'lbs' : 'kg';
+    setExerciseUnits((prev) => ({
+      ...prev,
+      [exerciseIndex]: newUnit,
+    }));
+    const updated = JSON.parse(JSON.stringify(editedSession)) as WorkoutSession;
+    updated.exercises[exerciseIndex].completedSets = updated.exercises[
+      exerciseIndex
+    ].completedSets.map((s) => ({ ...s, unit: newUnit }));
+    setEditedSession(updated);
+  }
+
+  function updateEditedSet(
+    exerciseIndex: number,
+    setIndex: number,
+    field: 'weight' | 'reps',
+    value: string
+  ) {
     const updated = JSON.parse(JSON.stringify(editedSession)) as WorkoutSession;
     updated.exercises[exerciseIndex].completedSets[setIndex][field] = parseFloat(value) || 0;
     setEditedSession(updated);
@@ -72,7 +130,12 @@ export default function SessionDetailScreen() {
     const updated = JSON.parse(JSON.stringify(editedSession)) as WorkoutSession;
     const sets = updated.exercises[exerciseIndex].completedSets;
     const last = sets[sets.length - 1];
-    sets.push({ setNumber: sets.length + 1, weight: last?.weight ?? 0, reps: last?.reps ?? 0, completed: false });
+    sets.push({
+      setNumber: sets.length + 1,
+      weight: last?.weight ?? 0,
+      reps: last?.reps ?? 0,
+      completed: false,
+    });
     setEditedSession(updated);
   }
 
@@ -81,7 +144,9 @@ export default function SessionDetailScreen() {
     const sets = updated.exercises[exerciseIndex].completedSets;
     if (sets.length <= 1) return;
     sets.splice(setIndex, 1);
-    sets.forEach((s, i) => { s.setNumber = i + 1; });
+    sets.forEach((s, i) => {
+      s.setNumber = i + 1;
+    });
     setEditedSession(updated);
   }
 
@@ -102,6 +167,7 @@ export default function SessionDetailScreen() {
 
   async function handleSave() {
     await updateSession(editedSession);
+    navigation.goBack();
   }
 
   function handleDelete() {
@@ -118,6 +184,11 @@ export default function SessionDetailScreen() {
     ]);
   }
 
+  const muscleGroups = seriesByMuscleGroup(editedSession);
+  const muscleGroupEntries = Object.entries(muscleGroups);
+  const maxSets =
+    muscleGroupEntries.length > 0 ? Math.max(...muscleGroupEntries.map(([, s]) => s)) : 0;
+
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
@@ -132,82 +203,116 @@ export default function SessionDetailScreen() {
       </View>
 
       <Text style={styles.header}>{editedSession.routineName}</Text>
-      <Text style={styles.subheader}>
-        {formatDate(editedSession.date)} · {formatDuration(editedSession.durationSeconds)} · {totalVolume(editedSession).toLocaleString('pt-BR')} kg volume
-      </Text>
+      <Text style={styles.subheader}>{formatDate(editedSession.date)}</Text>
 
-      <TouchableOpacity
-        style={styles.rpeRow}
-        onPress={() => {
-          setTempRPE(editedSession.rpe ?? 5);
-          setShowRPEModal(true);
-        }}
-      >
-        <Text style={styles.rpeSectionLabel}>RPE</Text>
-        <View style={styles.rpeValueRow}>
-          <Text style={styles.rpeValueText}>
+      <View style={styles.statsRow}>
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{formatDuration(editedSession.durationSeconds)}</Text>
+          <Text style={styles.statLabel}>Duração</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>
+            {totalVolume(editedSession, exerciseUnits).toLocaleString('pt-BR', {
+              maximumFractionDigits: 1,
+            })}{' '}
+            kg
+          </Text>
+          <Text style={styles.statLabel}>Volume</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <TouchableOpacity
+          style={styles.statItem}
+          onPress={() => {
+            setTempRPE(editedSession.rpe ?? 5);
+            setShowRPEModal(true);
+          }}
+        >
+          <Text style={[styles.statValue, { color: colors.primary }]}>
             {editedSession.rpe ?? '—'}
           </Text>
-          <Text style={styles.rpeValueLabel}>
-            {editedSession.rpe ? RPE_LABELS[editedSession.rpe] : 'Toque para avaliar'}
-          </Text>
-        </View>
-      </TouchableOpacity>
+          <Text style={styles.statLabel}>RPE</Text>
+        </TouchableOpacity>
+      </View>
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        {editedSession.exercises.map((ex, exerciseIndex) => (
-          <View key={ex.exercise.id + exerciseIndex} style={styles.exerciseCard}>
-            <View style={styles.exerciseHeader}>
-              <Text style={styles.exerciseName}>{ex.exercise.name}</Text>
-              <TouchableOpacity onPress={() => removeEditedExercise(exerciseIndex)}>
-                <Text style={styles.removeExerciseButton}>Remover</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.setsHeader}>
-              <Text style={styles.setsHeaderText}>Série</Text>
-              <Text style={styles.setsHeaderText}>Kg</Text>
-              <Text style={styles.setsHeaderText}>Reps</Text>
-              <Text style={styles.setsHeaderText}>Volume</Text>
-              <View style={{ width: 32 }} />
-            </View>
-
-            {ex.completedSets.map((set, setIndex) => (
-              <View key={setIndex} style={[styles.setRow, set.completed && styles.setRowCompleted]}>
-                <Text style={styles.setCell}>{set.setNumber}</Text>
-                <TextInput
-                  style={styles.input}
-                  value={String(set.weight)}
-                  onChangeText={(v) => updateEditedSet(exerciseIndex, setIndex, 'weight', v)}
-                  keyboardType="numeric"
-                  selectTextOnFocus
-                />
-                <TextInput
-                  style={styles.input}
-                  value={String(set.reps)}
-                  onChangeText={(v) => updateEditedSet(exerciseIndex, setIndex, 'reps', v)}
-                  keyboardType="numeric"
-                  selectTextOnFocus
-                />
-                <Text style={[styles.setCell, set.completed && styles.setCellGreen]}>
-                  {set.completed ? `${set.weight * set.reps} kg` : '—'}
-                </Text>
-                <TouchableOpacity
-                  style={styles.removeSetButton}
-                  onPress={() => removeEditedSet(exerciseIndex, setIndex)}
-                >
-                  <View style={styles.removeSetCircle}>
-                    <Text style={styles.removeSetText}>×</Text>
-                  </View>
-                </TouchableOpacity>
+        {muscleGroupEntries.length > 0 && (
+          <View style={styles.muscleGroupSection}>
+            <Text style={styles.muscleGroupTitle}>Séries por grupo muscular</Text>
+            {muscleGroupEntries.map(([group, sets]) => (
+              <View key={group} style={styles.muscleGroupItem}>
+                <Text style={styles.muscleGroupLabel}>{group}</Text>
+                <View style={styles.muscleGroupBarWrapper}>
+                  <View style={[styles.muscleGroupBar, { width: `${(sets / maxSets) * 100}%` }]} />
+                </View>
+                <Text style={styles.muscleGroupValue}>{sets}</Text>
               </View>
             ))}
-
-            <TouchableOpacity style={styles.addSetButton} onPress={() => addEditedSet(exerciseIndex)}>
-              <Text style={styles.addSetText}>+ Adicionar série</Text>
-            </TouchableOpacity>
           </View>
-        ))}
+        )}
+
+        {editedSession.exercises.map((ex, exerciseIndex) => {
+          const unit = getUnit(exerciseIndex);
+          return (
+            <View key={ex.exercise.id + exerciseIndex} style={styles.exerciseCard}>
+              <View style={styles.exerciseHeader}>
+                <Text style={styles.exerciseName}>{ex.exercise.name}</Text>
+                <TouchableOpacity onPress={() => removeEditedExercise(exerciseIndex)}>
+                  <Text style={styles.removeExerciseButton}>Remover</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.setsHeader}>
+                <Text style={styles.setsHeaderText}>Série</Text>
+                <TouchableOpacity style={{ flex: 1 }} onPress={() => toggleUnit(exerciseIndex)}>
+                  <Text style={[styles.setsHeaderText, styles.unitHeaderButton]}>
+                    {unit === 'lbs' ? 'Lbs ↕' : 'Kg ↕'}
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.setsHeaderText}>Reps</Text>
+                <Text style={styles.setsHeaderText}>Volume</Text>
+                <View style={{ width: 32 }} />
+              </View>
+
+              {ex.completedSets.map((set, setIndex) => (
+                <SwipeableRow
+                  key={setIndex}
+                  onDelete={() => removeEditedSet(exerciseIndex, setIndex)}
+                >
+                  <View style={[styles.setRow, set.completed && styles.setRowCompleted]}>
+                    <Text style={styles.setCell}>{set.setNumber}</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={String(set.weight)}
+                      onChangeText={(v) => updateEditedSet(exerciseIndex, setIndex, 'weight', v)}
+                      keyboardType="numeric"
+                      selectTextOnFocus
+                    />
+                    <TextInput
+                      style={styles.input}
+                      value={String(set.reps)}
+                      onChangeText={(v) => updateEditedSet(exerciseIndex, setIndex, 'reps', v)}
+                      keyboardType="numeric"
+                      selectTextOnFocus
+                    />
+                    <Text style={[styles.setCell, set.completed && styles.setCellGreen]}>
+                      {set.completed
+                        ? `${(unit === 'lbs' ? set.weight * set.reps * 0.453592 : set.weight * set.reps).toFixed(0)} kg`
+                        : '—'}
+                    </Text>
+                  </View>
+                </SwipeableRow>
+              ))}
+
+              <TouchableOpacity
+                style={styles.addSetButton}
+                onPress={() => addEditedSet(exerciseIndex)}
+              >
+                <Text style={styles.addSetText}>+ Adicionar série</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        })}
 
         <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
           <Text style={styles.deleteButtonText}>Deletar treino</Text>
@@ -216,38 +321,44 @@ export default function SessionDetailScreen() {
       </ScrollView>
 
       <Modal visible={showRPEModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>RPE</Text>
-            <Text style={styles.modalSubtitle}>Avalie o esforço percebido</Text>
-            <Text style={styles.rpeNumber}>{tempRPE}</Text>
-            <Text style={styles.rpeLabelText}>{RPE_LABELS[tempRPE]}</Text>
-            <Slider
-              style={{ width: '100%', height: 40 }}
-              minimumValue={1}
-              maximumValue={10}
-              step={1}
-              value={tempRPE}
-              onValueChange={setTempRPE}
-              minimumTrackTintColor={colors.primary}
-              maximumTrackTintColor={colors.border}
-              thumbTintColor={colors.primary}
-            />
-            <View style={styles.sliderLabels}>
-              <Text style={styles.sliderLabelText}>Leve</Text>
-              <Text style={styles.sliderLabelText}>Máximo</Text>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowRPEModal(false)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalTitle}>RPE</Text>
+              <Text style={styles.modalSubtitle}>Avalie o esforço percebido</Text>
+              <Text style={styles.rpeNumber}>{tempRPE}</Text>
+              <Text style={styles.rpeLabelText}>{RPE_LABELS[tempRPE]}</Text>
+              <Slider
+                style={{ width: '100%', height: 40 }}
+                minimumValue={1}
+                maximumValue={10}
+                step={1}
+                value={tempRPE}
+                onValueChange={setTempRPE}
+                minimumTrackTintColor={colors.primary}
+                maximumTrackTintColor={colors.border}
+                thumbTintColor={colors.primary}
+              />
+              <View style={styles.sliderLabels}>
+                <Text style={styles.sliderLabelText}>Leve</Text>
+                <Text style={styles.sliderLabelText}>Máximo</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.confirmButton}
+                onPress={() => {
+                  setEditedSession({ ...editedSession, rpe: tempRPE });
+                  setShowRPEModal(false);
+                }}
+              >
+                <Text style={styles.confirmButtonText}>Confirmar</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.confirmButton}
-              onPress={() => {
-                setEditedSession({ ...editedSession, rpe: tempRPE });
-                setShowRPEModal(false);
-              }}
-            >
-              <Text style={styles.confirmButtonText}>Confirmar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -269,7 +380,12 @@ const styles = StyleSheet.create({
   backButton: { ...typography.label, color: colors.textSubtle },
   saveButton: { ...typography.label, color: colors.primary, fontWeight: '600' },
   header: { ...typography.appTitle, color: colors.text },
-  subheader: { ...typography.small, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.md },
+  subheader: {
+    ...typography.small,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
+  },
   scroll: { flex: 1 },
   rpeRow: {
     backgroundColor: colors.surface,
@@ -291,6 +407,46 @@ const styles = StyleSheet.create({
   rpeValueRow: { alignItems: 'flex-end' },
   rpeValueText: { fontSize: 22, fontWeight: '700', color: colors.primary },
   rpeValueLabel: { ...typography.tiny, color: colors.textSubtle, marginTop: 2 },
+  muscleGroupSection: {
+    marginBottom: spacing.lg,
+  },
+  muscleGroupTitle: {
+    ...typography.tiny,
+    color: colors.textSubtle,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing.md,
+  },
+  muscleGroupItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  muscleGroupLabel: {
+    ...typography.tiny,
+    color: colors.textSubtle,
+    width: 90,
+  },
+  muscleGroupBarWrapper: {
+    flex: 1,
+    height: 6,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  muscleGroupBar: {
+    height: 6,
+    backgroundColor: colors.primary,
+    borderRadius: 3,
+  },
+  muscleGroupValue: {
+    ...typography.tiny,
+    color: colors.textSubtle,
+    width: 20,
+    textAlign: 'right',
+    fontWeight: '600',
+  },
   exerciseCard: {
     backgroundColor: colors.surface,
     borderRadius: 12,
@@ -314,6 +470,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
   },
   setsHeaderText: { ...typography.tiny, color: colors.textSubtle, flex: 1, textAlign: 'center' },
+  unitHeaderButton: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
   setRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -335,24 +495,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     fontSize: 14,
     marginHorizontal: spacing.xs,
-  },
-  removeSetButton: { width: 32, alignItems: 'center', justifyContent: 'center' },
-  removeSetCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.textSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  removeSetText: {
-    color: colors.textSubtle,
-    fontSize: 14,
-    fontWeight: '700',
-    includeFontPadding: false,
-    textAlignVertical: 'center',
   },
   addSetButton: { paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.xs },
   addSetText: { ...typography.small, color: colors.primary },
@@ -407,4 +549,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   confirmButtonText: { ...typography.label, color: '#000', fontWeight: '700' },
+  statsRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.xl,
+    marginTop: spacing.sm,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statDivider: {
+    width: 0.5,
+    backgroundColor: colors.border,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.textMuted,
+    letterSpacing: -0.5,
+  },
+  statLabel: {
+    ...typography.tiny,
+    color: colors.textSubtle,
+    marginTop: 2,
+    textAlign: 'center',
+  },
 });

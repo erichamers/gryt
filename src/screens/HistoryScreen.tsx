@@ -1,11 +1,5 @@
 import { useState, useCallback } from 'react';
-import {
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  ScrollView,
-} from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { WorkoutSession } from '../types';
@@ -32,9 +26,15 @@ function formatDuration(seconds: number): string {
 
 function totalVolume(session: WorkoutSession): number {
   return session.exercises.reduce((acc, ex) => {
-    return acc + ex.completedSets
-      .filter((s) => s.completed)
-      .reduce((a, s) => a + s.weight * s.reps, 0);
+    return (
+      acc +
+      ex.completedSets
+        .filter((s) => s.completed)
+        .reduce((a, s) => {
+          const weightInKg = s.unit === 'lbs' ? s.weight * 0.453592 : s.weight;
+          return a + weightInKg * s.reps;
+        }, 0)
+    );
   }, 0);
 }
 
@@ -51,14 +51,10 @@ export default function HistoryScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Histórico</Text>
-      <Text style={styles.subheader}>
-        {sessions.length} treino{sessions.length !== 1 ? 's' : ''} registrado{sessions.length !== 1 ? 's' : ''}
-      </Text>
+      <Text style={styles.subheader}>Seus treinos feitos</Text>
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        {sessions.length === 0 && (
-          <Text style={styles.empty}>Nenhum treino ainda.</Text>
-        )}
+        {sessions.length === 0 && <Text style={styles.empty}>Nenhum treino ainda.</Text>}
         {sessions.map((session) => (
           <TouchableOpacity
             key={session.id}
@@ -79,7 +75,9 @@ export default function HistoryScreen() {
                 <Text style={styles.statLabel}>Exercícios</Text>
               </View>
               <View style={styles.stat}>
-                <Text style={styles.statValue}>{totalVolume(session).toLocaleString('pt-BR')} kg</Text>
+                <Text style={styles.statValue}>
+                  {Math.round(totalVolume(session)).toLocaleString('pt-BR')} kg
+                </Text>
                 <Text style={styles.statLabel}>Volume total</Text>
               </View>
             </View>
@@ -99,7 +97,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.screenHorizontal,
   },
   header: { ...typography.appTitle, color: colors.text },
-  subheader: { ...typography.small, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.md },
+  subheader: {
+    ...typography.small,
+    color: colors.textSubtle,
+    marginTop: 2,
+    marginBottom: spacing.md,
+  },
   scroll: { flex: 1 },
   empty: { ...typography.small, color: colors.textSubtle, textAlign: 'center', marginTop: 60 },
   card: {

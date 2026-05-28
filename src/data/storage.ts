@@ -1,9 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WorkoutSession, WorkoutExercise, UserRoutine } from '../types';
+import { ROUTINES } from './routines';
 
 const SESSIONS_KEY = 'gryt_sessions';
 const ACTIVE_WORKOUT_KEY = 'gryt_active_workout';
 const USER_ROUTINES_KEY = 'gryt_user_routines';
+const SEED_KEY = 'gryt_seeded_v1';
 
 export async function saveSession(session: WorkoutSession): Promise<void> {
   try {
@@ -136,12 +138,13 @@ export type WorkloadMetrics = {
 export async function getWorkloadMetrics(): Promise<WorkloadMetrics> {
   const sessions = await getSessions();
   const now = Date.now();
+  const DAY = 24 * 60 * 60 * 1000;
 
   const day7 = sessions.filter(
-    (s) => now - new Date(s.date).getTime() <= 7 * 24 * 60 * 60 * 1000
+    (s) => now - new Date(s.date).getTime() <= 7 * DAY
   );
   const day28 = sessions.filter(
-    (s) => now - new Date(s.date).getTime() <= 28 * 24 * 60 * 60 * 1000
+    (s) => now - new Date(s.date).getTime() <= 28 * DAY
   );
 
   const acuteLoad = day7.reduce((acc, s) => {
@@ -150,19 +153,132 @@ export async function getWorkloadMetrics(): Promise<WorkloadMetrics> {
     return acc + rpe * minutes;
   }, 0);
 
+  const weeksWithData = new Set(
+    day28.map((s) => {
+      const date = new Date(s.date);
+      const startOfYear = new Date(date.getFullYear(), 0, 1);
+      const weekNumber = Math.ceil(
+        ((date.getTime() - startOfYear.getTime()) / DAY + startOfYear.getDay() + 1) / 7
+      );
+      return `${date.getFullYear()}-${weekNumber}`;
+    })
+  ).size;
+
+  const divisor = Math.min(Math.max(weeksWithData, 1), 4);
+
   const chronicLoad = day28.length > 0
     ? day28.reduce((acc, s) => {
         const rpe = s.rpe ?? 5;
         const minutes = s.durationSeconds / 60;
         return acc + rpe * minutes;
-      }, 0) / 4
+      }, 0) / divisor
     : 0;
 
-  const ratio = chronicLoad > 0 ? acuteLoad / chronicLoad : 0;
+  const hasEnoughHistory = weeksWithData > 1;
+  const ratio = hasEnoughHistory && chronicLoad > 0
+    ? acuteLoad / chronicLoad
+    : 0;
 
   return {
     acuteLoad: Math.round(acuteLoad),
     chronicLoad: Math.round(chronicLoad),
     ratio: Math.round(ratio * 100) / 100,
   };
+}
+
+export async function seedDefaultRoutines(): Promise<void> {
+  const seeded = await AsyncStorage.getItem(SEED_KEY);
+  if (seeded) return;
+
+  const existing = await getUserRoutines();
+  const defaults: UserRoutine[] = ROUTINES.map((r) => ({
+    id: r.id,
+    name: r.name,
+    subtitle: r.subtitle,
+    createdAt: new Date().toISOString(),
+    exercises: r.exercises.map((ex) => ({
+      exerciseTemplateId: ex.id,
+      name: ex.name,
+      sets: Array.from({ length: ex.sets }, () => ({
+        weight: ex.weight,
+        reps: parseInt(ex.reps) || 0,
+        restSeconds: ex.restSeconds,
+      })),
+      notes: ex.notes,
+    })),
+  }));
+
+  await AsyncStorage.setItem(USER_ROUTINES_KEY, JSON.stringify([...defaults, ...existing]));
+  await AsyncStorage.setItem(SEED_KEY, '1');
+}
+
+export async function seedTestSession(): Promise<void> {
+  const existing = await getSessions();
+  if (existing.some((s) => s.id === 'seed-treino-b-2')) return;
+
+  const session: WorkoutSession = {
+    id: 'seed-treino-b-2',
+    routineId: 'treino-b',
+    routineName: 'Treino B',
+    date: new Date().toISOString(),
+    durationSeconds: 42 * 60,
+    rpe: 4,
+    exercises: [
+      {
+        exercise: { id: 'ex-021', name: 'Romanian Deadlift (Barbell)', sets: 2, reps: '6', weight: 110, restSeconds: 150 },
+        completedSets: [
+          { setNumber: 1, weight: 110, reps: 6, completed: true },
+          { setNumber: 2, weight: 110, reps: 6, completed: true },
+        ],
+      },
+      {
+        exercise: { id: 'ex-014', name: 'Lat Pulldown (Cable)', sets: 2, reps: '10', weight: 65, restSeconds: 105 },
+        completedSets: [
+          { setNumber: 1, weight: 65, reps: 10, completed: true },
+          { setNumber: 2, weight: 65, reps: 10, completed: true },
+        ],
+      },
+      {
+        exercise: { id: 'ex-017', name: 'Dumbbell Row', sets: 2, reps: '10', weight: 30, restSeconds: 90 },
+        completedSets: [
+          { setNumber: 1, weight: 30, reps: 10, completed: true },
+          { setNumber: 2, weight: 30, reps: 10, completed: true },
+        ],
+      },
+      {
+        exercise: { id: 'ex-039', name: 'Bicep Curl (Barbell)', sets: 2, reps: '10', weight: 50, restSeconds: 90 },
+        completedSets: [
+          { setNumber: 1, weight: 50, reps: 10, completed: true },
+          { setNumber: 2, weight: 50, reps: 10, completed: true },
+        ],
+      },
+      {
+        exercise: { id: 'ex-048', name: 'Triceps Pushdown', sets: 2, reps: '10', weight: 70, restSeconds: 75 },
+        completedSets: [
+          { setNumber: 1, weight: 70, reps: 10, completed: true },
+          { setNumber: 2, weight: 70, reps: 10, completed: true },
+        ],
+      },
+      {
+        exercise: { id: 'ex-009', name: 'Butterfly (Pec Deck)', sets: 1, reps: '12', weight: 75, restSeconds: 75 },
+        completedSets: [
+          { setNumber: 1, weight: 75, reps: 12, completed: true },
+        ],
+      },
+      {
+        exercise: { id: 'ex-070', name: 'Seated Leg Curl (Machine)', sets: 1, reps: '15', weight: 65, restSeconds: 60 },
+        completedSets: [
+          { setNumber: 1, weight: 65, reps: 15, completed: true },
+        ],
+      },
+      {
+        exercise: { id: 'ex-080', name: 'Hip Abduction (Machine)', sets: 1, reps: '20', weight: 45, restSeconds: 60 },
+        completedSets: [
+          { setNumber: 1, weight: 45, reps: 20, completed: true },
+        ],
+      },
+    ],
+  };
+
+  await saveSession(session);
 }

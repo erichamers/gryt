@@ -10,11 +10,13 @@ import {
   Vibration,
   AppState,
   Modal,
+  Image,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Routine, WorkoutExercise, CompletedSet, WorkoutSession } from '../types';
+import { UserRoutine, WorkoutExercise, CompletedSet, WorkoutSession } from '../types';
+import { EXERCISES } from '../data/exercises';
 import {
   saveSession,
   getLastSession,
@@ -29,18 +31,31 @@ import { colors, spacing, typography } from '../theme';
 import { requestNotificationPermission, scheduleRestNotification, cancelRestNotification } from '../data/notifications';
 import Slider from '@react-native-community/slider';
 import { HomeStackParamList } from '../navigation/types';
+import { SwipeableRow } from '../components/SwipeableRow';
 
-type WorkoutRouteParams = { routine: Routine; deletable: boolean };
+type WorkoutRouteParams = { routine: UserRoutine; deletable: boolean };
 type WorkoutRoute = RouteProp<{ Workout: WorkoutRouteParams }, 'Workout'>;
 
-function initWorkout(routine: Routine): WorkoutExercise[] {
-  return routine.exercises.map((exercise) => ({
-    exercise,
-    completedSets: Array.from({ length: exercise.sets }, (_, i) => ({
+const LBS_TO_KG = 0.453592;
+
+function initWorkout(routine: UserRoutine): WorkoutExercise[] {
+  return routine.exercises.map((ex) => ({
+    exercise: {
+      id: ex.exerciseTemplateId,
+      name: ex.name,
+      sets: ex.sets.length,
+      reps: String(ex.sets[0]?.reps ?? 0),
+      weight: ex.sets[0]?.weight ?? 0,
+      restSeconds: ex.sets[0]?.restSeconds ?? 90,
+      notes: ex.notes,
+      unit: 'kg',
+    },
+    completedSets: ex.sets.map((s, i) => ({
       setNumber: i + 1,
-      weight: exercise.weight,
-      reps: parseInt(exercise.reps) || 0,
+      weight: s.weight,
+      reps: s.reps,
       completed: false,
+      unit: 'kg' as 'kg' | 'lbs',
     })),
   }));
 }
@@ -49,6 +64,10 @@ function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function toKg(weight: number, unit: 'kg' | 'lbs'): number {
+  return unit === 'lbs' ? weight * LBS_TO_KG : weight;
 }
 
 const RPE_LABELS: Record<number, string> = {
@@ -78,6 +97,7 @@ export default function WorkoutScreen() {
   const [isDirty, setIsDirty] = useState(false);
   const [showRPEModal, setShowRPEModal] = useState(false);
   const [selectedRPE, setSelectedRPE] = useState<number>(5);
+  const [imageModalUrl, setImageModalUrl] = useState<string | null>(null);
   const restEndTime = useRef<number | null>(null);
   const startTime = useRef(Date.now());
   const appState = useRef(AppState.currentState);
@@ -171,12 +191,28 @@ export default function WorkoutScreen() {
     setStarted(true);
   }
 
+  function toggleUnit(exerciseIndex: number) {
+    setIsDirty(true);
+    setExercises((prev) => {
+      const updated = [...prev];
+      const ex = updated[exerciseIndex];
+      const newUnit = ex.exercise.unit === 'kg' ? 'lbs' : 'kg';
+      updated[exerciseIndex] = {
+        ...ex,
+        exercise: { ...ex.exercise, unit: newUnit },
+        completedSets: ex.completedSets.map((s) => ({ ...s, unit: newUnit })),
+      };
+      return updated;
+    });
+  }
+
   function updateSet(exerciseIndex: number, setIndex: number, field: 'weight' | 'reps', value: string) {
     setIsDirty(true);
     setExercises((prev) => {
       const updated = [...prev];
       const sets = [...updated[exerciseIndex].completedSets];
-      sets[setIndex] = { ...sets[setIndex], [field]: parseFloat(value) || 0 };
+      const unit = updated[exerciseIndex].exercise.unit ?? 'kg';
+      sets[setIndex] = { ...sets[setIndex], [field]: parseFloat(value) || 0, unit };
       updated[exerciseIndex] = { ...updated[exerciseIndex], completedSets: sets };
       return updated;
     });
@@ -219,24 +255,31 @@ export default function WorkoutScreen() {
       const updated = [...prev];
       const sets = [...updated[exerciseIndex].completedSets];
       const last = sets[sets.length - 1];
+      const unit = updated[exerciseIndex].exercise.unit ?? 'kg';
       sets.push({
         setNumber: sets.length + 1,
         weight: last?.weight ?? 0,
         reps: last?.reps ?? 0,
         completed: false,
+        unit,
       });
       updated[exerciseIndex] = { ...updated[exerciseIndex], completedSets: sets };
       return updated;
     });
   }
 
-  function removeSet(exerciseIndex: number) {
+  function removeSet(exerciseIndex: number, setIndex?: number) {
     setIsDirty(true);
     setExercises((prev) => {
       const updated = [...prev];
       const sets = [...updated[exerciseIndex].completedSets];
       if (sets.length <= 1) return prev;
-      sets.pop();
+      if (setIndex !== undefined) {
+        sets.splice(setIndex, 1);
+        sets.forEach((s, i) => { s.setNumber = i + 1; });
+      } else {
+        sets.pop();
+      }
       updated[exerciseIndex] = { ...updated[exerciseIndex], completedSets: sets };
       return updated;
     });
@@ -263,25 +306,36 @@ export default function WorkoutScreen() {
   }
 
   async function handleSaveRoutine() {
-    if (!deletable) return;
-    const userRoutines = await getUserRoutines();
-    const existing = userRoutines.find((r) => r.id === routine.id);
-    if (!existing) return;
-    const updated = {
-      ...existing,
-      exercises: exercises.map((ex) => ({
-        exerciseTemplateId: ex.exercise.id,
-        name: ex.exercise.name,
-        sets: ex.completedSets.map((s) => ({
-          weight: s.weight,
-          reps: s.reps,
-          restSeconds: ex.exercise.restSeconds,
-        })),
-        notes: ex.exercise.notes,
-      })),
-    };
-    await updateUserRoutine(updated);
-    setIsDirty(false);
+    Alert.alert(
+      'Salvar alterações',
+      `Tem certeza que deseja alterar o ${routine.name}?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Salvar',
+          onPress: async () => {
+            const userRoutines = await getUserRoutines();
+            const existing = userRoutines.find((r) => r.id === routine.id);
+            if (!existing) return;
+            const updated: UserRoutine = {
+              ...existing,
+              exercises: exercises.map((ex) => ({
+                exerciseTemplateId: ex.exercise.id,
+                name: ex.exercise.name,
+                sets: ex.completedSets.map((s) => ({
+                  weight: s.weight,
+                  reps: s.reps,
+                  restSeconds: ex.exercise.restSeconds,
+                })),
+                notes: ex.exercise.notes,
+              })),
+            };
+            await updateUserRoutine(updated);
+            setIsDirty(false);
+          },
+        },
+      ]
+    );
   }
 
   function handleDelete() {
@@ -338,11 +392,23 @@ export default function WorkoutScreen() {
 
   return (
     <View style={styles.container}>
+      {!started && (
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Text style={styles.backButtonText}>← Voltar</Text>
+        </TouchableOpacity>
+      )}
+
       <View style={styles.topBar}>
         <Text style={styles.routineTitle} numberOfLines={1}>{routine.name}</Text>
-        {started ? (
+          {started ? (
           <TouchableOpacity style={styles.finishButton} onPress={handleFinish}>
             <Text style={styles.finishButtonText}>Finalizar</Text>
+          </TouchableOpacity>
+        ) : isDirty ? (
+          <TouchableOpacity style={styles.saveRoutineButtonInline} onPress={async () => {
+            await handleSaveRoutine();
+          }}>
+            <Text style={styles.saveRoutineButtonInlineText}>Salvar</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.startButtonTop} onPress={handleStart}>
@@ -381,9 +447,23 @@ export default function WorkoutScreen() {
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {exercises.map((ex, exerciseIndex) => {
           const lastSets = getLastSets(ex.exercise.id);
+          const exerciseTemplate = EXERCISES.find((t) => t.id === ex.exercise.id);
+          const imageUrl = exerciseTemplate?.imageUrl;
+          const unit = ex.exercise.unit ?? 'kg';
           return (
             <View key={ex.exercise.id + exerciseIndex} style={styles.exerciseCard}>
               <View style={styles.exerciseHeader}>
+                {imageUrl ? (
+                  <TouchableOpacity onPress={() => setImageModalUrl(imageUrl)} style={styles.exerciseThumbnail}>
+                    <Image
+                      source={{ uri: imageUrl }}
+                      style={styles.exerciseThumbnailImage}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={[styles.exerciseThumbnail, styles.exerciseThumbnailPlaceholder]} />
+                )}
                 <Text style={styles.exerciseName}>{ex.exercise.name}</Text>
                 {!started && (
                   <TouchableOpacity onPress={() => removeExercise(exerciseIndex)}>
@@ -412,7 +492,11 @@ export default function WorkoutScreen() {
               <View style={styles.setsHeader}>
                 <Text style={styles.setsHeaderText}>Série</Text>
                 {started && <Text style={[styles.setsHeaderText, styles.previousHeader]}>Anterior</Text>}
-                <Text style={styles.setsHeaderText}>Kg</Text>
+                <TouchableOpacity style={{ flex: 1 }} onPress={() => toggleUnit(exerciseIndex)}>
+                  <Text style={[styles.setsHeaderText, styles.unitHeaderButton]}>
+                    {unit === 'lbs' ? 'Lbs ↕' : 'Kg ↕'}
+                  </Text>
+                </TouchableOpacity>
                 <Text style={styles.setsHeaderText}>Reps</Text>
                 <Text style={styles.setsHeaderText}>{started ? 'Feito' : ''}</Text>
               </View>
@@ -420,14 +504,17 @@ export default function WorkoutScreen() {
               {ex.completedSets.map((set, setIndex) => {
                 const last = lastSets?.[setIndex];
                 return (
-                  <View key={setIndex} style={[styles.setRow, set.completed && styles.setRowCompleted]}>
-                    <Text style={styles.setNumber}>{set.setNumber}</Text>
-                    {started && (
-                      <Text style={styles.previousValue}>
-                        {last ? `${last.weight}×${last.reps}` : '—'}
-                      </Text>
-                    )}
-                    <View style={styles.inputWrapper}>
+                  <SwipeableRow
+                    key={setIndex}
+                    onDelete={() => removeSet(exerciseIndex, setIndex)}
+                  >
+                    <View style={[styles.setRow, set.completed && styles.setRowCompleted]}>
+                      <Text style={styles.setNumber}>{set.setNumber}</Text>
+                      {started && (
+                        <Text style={styles.previousValue}>
+                          {last ? `${last.weight}×${last.reps}` : '—'}
+                        </Text>
+                      )}
                       <TextInput
                         style={styles.input}
                         value={String(set.weight)}
@@ -435,8 +522,6 @@ export default function WorkoutScreen() {
                         keyboardType="numeric"
                         selectTextOnFocus
                       />
-                    </View>
-                    <View style={styles.inputWrapper}>
                       <TextInput
                         style={styles.input}
                         value={String(set.reps)}
@@ -444,20 +529,20 @@ export default function WorkoutScreen() {
                         keyboardType="numeric"
                         selectTextOnFocus
                       />
+                      {started ? (
+                        <TouchableOpacity
+                          style={styles.checkButton}
+                          onPress={() => toggleSet(exerciseIndex, setIndex)}
+                        >
+                          <Text style={styles.checkButtonText}>
+                            {set.completed ? '✓' : '○'}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={{ flex: 1 }} />
+                      )}
                     </View>
-                    {started ? (
-                      <TouchableOpacity
-                        style={styles.checkButton}
-                        onPress={() => toggleSet(exerciseIndex, setIndex)}
-                      >
-                        <Text style={styles.checkButtonText}>
-                          {set.completed ? '✓' : '○'}
-                        </Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <View style={styles.inputWrapper} />
-                    )}
-                  </View>
+                  </SwipeableRow>
                 );
               })}
 
@@ -473,12 +558,6 @@ export default function WorkoutScreen() {
           );
         })}
 
-        {!started && deletable && isDirty && (
-          <TouchableOpacity style={styles.saveRoutineButton} onPress={handleSaveRoutine}>
-            <Text style={styles.saveRoutineButtonText}>Salvar alterações na rotina</Text>
-          </TouchableOpacity>
-        )}
-
         {deletable && !started && (
           <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
             <Text style={styles.deleteButtonText}>Deletar treino</Text>
@@ -487,6 +566,28 @@ export default function WorkoutScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <Modal visible={!!imageModalUrl} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.imageModalOverlay}
+          activeOpacity={1}
+          onPress={() => setImageModalUrl(null)}
+        >
+          <View style={styles.imageModalContainer}>
+            <Image
+              source={{ uri: imageModalUrl! }}
+              style={styles.imageModalImage}
+              resizeMode="contain"
+            />
+            <TouchableOpacity
+              style={styles.imageModalCloseButton}
+              onPress={() => setImageModalUrl(null)}
+            >
+              <Text style={styles.imageModalCloseText}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <Modal visible={showRPEModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
@@ -541,14 +642,21 @@ const styles = StyleSheet.create({
     paddingTop: spacing.screenTop,
     paddingHorizontal: spacing.screenHorizontal,
   },
+  backButton: {
+    marginBottom: 4,
+  },
+  backButtonText: {
+    ...typography.small,
+    color: colors.textSubtle,
+  },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: 0,
   },
   routineTitle: {
-    ...typography.title,
+    ...typography.appTitle,
     color: colors.text,
     flex: 1,
     marginRight: spacing.md,
@@ -563,6 +671,7 @@ const styles = StyleSheet.create({
   routineSubtitle: {
     ...typography.small,
     color: colors.textSubtle,
+    marginTop: 2,
     marginBottom: spacing.xxl,
   },
   finishButton: {
@@ -613,17 +722,32 @@ const styles = StyleSheet.create({
   },
   exerciseHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  exerciseThumbnail: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  exerciseThumbnailImage: {
+    width: 44,
+    height: 44,
+  },
+  exerciseThumbnailPlaceholder: {
+    backgroundColor: colors.surfaceAlt,
   },
   exerciseName: { ...typography.label, color: colors.text, fontWeight: '600', flex: 1 },
-  removeExerciseButton: { ...typography.small, color: colors.danger },
+  removeExerciseButton: { ...typography.small, color: colors.danger, flexShrink: 0 },
   exerciseNotes: { ...typography.tiny, color: colors.textSubtle, marginBottom: spacing.sm, fontStyle: 'italic' },
   restRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: spacing.md,
     marginBottom: spacing.sm,
     paddingHorizontal: spacing.xs,
   },
@@ -641,31 +765,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: spacing.sm,
+    marginTop: spacing.md,
     paddingHorizontal: spacing.xs,
   },
   setsHeaderText: { ...typography.tiny, color: colors.textSubtle, flex: 1, textAlign: 'center' },
   previousHeader: { flex: 1.5 },
+  unitHeaderButton: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
   setRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: spacing.xs,
     borderRadius: 8,
     marginBottom: spacing.xs,
+    backgroundColor: colors.primaryDim,
   },
   setRowCompleted: { backgroundColor: colors.primaryDim },
   setNumber: { ...typography.small, color: colors.textSubtle, flex: 1, textAlign: 'center' },
   previousValue: { ...typography.small, color: colors.textSubtle, flex: 1.5, textAlign: 'center' },
-  inputWrapper: { flex: 1, alignItems: 'center' },
   input: {
+    flex: 1,
     backgroundColor: colors.surfaceAlt,
     color: colors.text,
     borderRadius: 6,
-    width: 52,
     textAlign: 'center',
-    paddingVertical: 8,
-    fontSize: 17,
+    paddingVertical: 6,
+    fontSize: 14,
+    marginHorizontal: spacing.xs,
   },
   checkButton: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
   checkButtonText: { fontSize: 22, color: colors.primary },
@@ -702,6 +832,34 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   deleteButtonText: { ...typography.label, color: colors.danger },
+  imageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  imageModalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: spacing.lg,
+    alignItems: 'center',
+    width: '100%',
+  },
+  imageModalImage: {
+    width: 280,
+    height: 280,
+  },
+  imageModalCloseButton: {
+    marginTop: spacing.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+  },
+  imageModalCloseText: { ...typography.label, color: colors.text },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.7)',
@@ -755,4 +913,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   skipButtonText: { ...typography.small, color: colors.textSubtle },
+  saveRoutineButtonInline: {
+    backgroundColor: colors.surface,
+    borderWidth: 0.5,
+    borderColor: colors.primaryBorder,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: 8,
+  },
+  saveRoutineButtonInlineText: {
+    ...typography.small,
+    color: colors.primary,
+    fontWeight: '600',
+  },
 });
