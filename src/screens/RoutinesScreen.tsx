@@ -1,3 +1,4 @@
+import { signOut } from '../lib/auth';
 import { useState, useCallback, useEffect } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, FlatList, Alert } from 'react-native';
 import { useFocusEffect, useNavigation, CompositeNavigationProp } from '@react-navigation/native';
@@ -108,6 +109,9 @@ export default function RoutinesScreen() {
                 </Svg>
                 <Text style={styles.tagline}>Treine com propósito</Text>
               </View>
+              <TouchableOpacity onPress={signOut}>
+                <Text style={{ color: colors.textSubtle, ...typography.tiny }}>Sair</Text>
+              </TouchableOpacity>
             </View>
 
             {metrics && (

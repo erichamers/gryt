@@ -1,4 +1,4 @@
-import 'expo-dev-client';
+import { syncFromSupabase, syncToSupabase } from './src/lib/sync';
 import 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -48,6 +48,7 @@ export default function App() {
     if (session) {
       seedDefaultRoutines();
       seedTestSession();
+      syncFromSupabase().then(() => syncToSupabase());
     }
   }, [session]);
 

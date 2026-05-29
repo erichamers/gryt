@@ -1,3 +1,4 @@
+import { syncToSupabase } from '../lib/sync';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WorkoutSession, WorkoutExercise, UserRoutine } from '../types';
 import { ROUTINES } from './routines';
@@ -12,6 +13,7 @@ export async function saveSession(session: WorkoutSession): Promise<void> {
     const existing = await getSessions();
     const updated = [session, ...existing];
     await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(updated));
+    syncToSupabase().catch(console.error);
   } catch (e) {
     console.error('Erro ao salvar sessão:', e);
   }
@@ -43,6 +45,8 @@ export async function deleteSession(sessionId: string): Promise<void> {
     const sessions = await getSessions();
     const updated = sessions.filter((s) => s.id !== sessionId);
     await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(updated));
+    const { supabase } = await import('../lib/supabase');
+    await supabase.from('sessions').delete().eq('id', sessionId);
   } catch (e) {
     console.error('Erro ao deletar sessão:', e);
   }
@@ -104,6 +108,7 @@ export async function saveUserRoutine(routine: UserRoutine): Promise<void> {
     const existing = await getUserRoutines();
     const updated = [routine, ...existing];
     await AsyncStorage.setItem(USER_ROUTINES_KEY, JSON.stringify(updated));
+    syncToSupabase().catch(console.error);
   } catch (e) {
     console.error('Erro ao salvar rotina:', e);
   }
@@ -114,6 +119,7 @@ export async function updateUserRoutine(routine: UserRoutine): Promise<void> {
     const existing = await getUserRoutines();
     const updated = existing.map((r) => (r.id === routine.id ? routine : r));
     await AsyncStorage.setItem(USER_ROUTINES_KEY, JSON.stringify(updated));
+    syncToSupabase().catch(console.error);
   } catch (e) {
     console.error('Erro ao atualizar rotina:', e);
   }
@@ -124,6 +130,9 @@ export async function deleteUserRoutine(routineId: string): Promise<void> {
     const existing = await getUserRoutines();
     const updated = existing.filter((r) => r.id !== routineId);
     await AsyncStorage.setItem(USER_ROUTINES_KEY, JSON.stringify(updated));
+    const { createClient } = await import('@supabase/supabase-js');
+    const { supabase } = await import('../lib/supabase');
+    await supabase.from('routines').delete().eq('id', routineId);
   } catch (e) {
     console.error('Erro ao deletar rotina:', e);
   }
