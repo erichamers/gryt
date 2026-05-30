@@ -1,4 +1,5 @@
 import { signOut } from '../lib/auth';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useCallback, useEffect } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, FlatList, Alert } from 'react-native';
 import { useFocusEffect, useNavigation, CompositeNavigationProp } from '@react-navigation/native';
@@ -6,7 +7,6 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { UserRoutine, WorkoutSession } from '../types';
 import {
-  getActiveWorkout,
   getSessions,
   getWorkloadMetrics,
   getUserRoutines,
@@ -53,17 +53,14 @@ function getRatioStatus(ratio: number): { label: string; color: string } {
 }
 
 export default function RoutinesScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<RoutinesNavProp>();
-  const [activeRoutineId, setActiveRoutineId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [metrics, setMetrics] = useState<WorkloadMetrics | null>(null);
   const [userRoutines, setUserRoutines] = useState<UserRoutine[]>([]);
 
   useEffect(() => {
     getUserRoutines().then(setUserRoutines);
-    getActiveWorkout().then((workout) => {
-      setActiveRoutineId(workout ? workout.routineId : null);
-    });
     getSessions().then(setSessions);
     getWorkloadMetrics().then((m) => {
       setMetrics(m);
@@ -73,24 +70,16 @@ export default function RoutinesScreen() {
   const allRoutines = userRoutines.map(userRoutineToRoutine);
   const ratioStatus = metrics ? getRatioStatus(metrics.ratio) : null;
 
-  async function handleResumeWorkout() {
-    const active = await getActiveWorkout();
-    if (!active) return;
-    const user = userRoutines.find((r) => r.id === active.routineId);
-    if (user) {
-      navigation.navigate('Workout', { routine: userRoutineToRoutine(user), deletable: true });
-    }
-  }
-
   return (
     <View style={styles.container}>
       <FlatList
         data={sessions.slice(0, 10)}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <>
-            <View style={styles.header}>
+            <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
               <View>
                 <Svg width={160} height={45} viewBox="0 0 320 90">
                   <SvgText
@@ -180,18 +169,6 @@ export default function RoutinesScreen() {
               </View>
             )}
 
-            {activeRoutineId && (
-              <TouchableOpacity style={styles.resumeBanner} onPress={handleResumeWorkout}>
-                <View>
-                  <Text style={styles.resumeTitle}>Treino em andamento</Text>
-                  <Text style={styles.resumeSubtitle}>
-                    {allRoutines.find((r) => r.id === activeRoutineId)?.name} · Toque para retomar
-                  </Text>
-                </View>
-                <Text style={styles.resumeArrow}>→</Text>
-              </TouchableOpacity>
-            )}
-
             {sessions.length > 0 && <Text style={styles.sectionTitle}>Atividade recente</Text>}
 
             {sessions.length === 0 && (
@@ -253,7 +230,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    paddingTop: spacing.screenTop,
     paddingHorizontal: spacing.screenHorizontal,
     marginBottom: spacing.xl,
   },
@@ -302,26 +278,6 @@ const styles = StyleSheet.create({
     color: colors.textSubtle,
     marginTop: 1,
   },
-  resumeBanner: {
-    backgroundColor: colors.primaryDim,
-    borderRadius: 12,
-    padding: spacing.lg,
-    marginHorizontal: spacing.screenHorizontal,
-    marginBottom: spacing.lg,
-    borderWidth: 0.5,
-    borderColor: colors.primaryBorder,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  resumeTitle: {
-    ...typography.small,
-    color: colors.primary,
-    fontWeight: '600',
-    marginBottom: spacing.xs,
-  },
-  resumeSubtitle: { ...typography.small, color: colors.textSubtle },
-  resumeArrow: { color: colors.primary, fontSize: 18 },
   sectionTitle: {
     ...typography.tiny,
     color: colors.textSubtle,

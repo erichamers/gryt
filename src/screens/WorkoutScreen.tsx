@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
@@ -11,6 +12,7 @@ import {
   AppState,
   Modal,
   Image,
+  Animated,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -66,10 +68,6 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function toKg(weight: number, unit: 'kg' | 'lbs'): number {
-  return unit === 'lbs' ? weight * LBS_TO_KG : weight;
-}
-
 const RPE_LABELS: Record<number, string> = {
   1: 'Muito leve',
   2: 'Leve',
@@ -84,6 +82,7 @@ const RPE_LABELS: Record<number, string> = {
 };
 
 export default function WorkoutScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const route = useRoute<WorkoutRoute>();
   const { routine, deletable } = route.params;
@@ -101,6 +100,7 @@ export default function WorkoutScreen() {
   const restEndTime = useRef<number | null>(null);
   const startTime = useRef(Date.now());
   const appState = useRef(AppState.currentState);
+  const restAnim = useRef(new Animated.Value(-100)).current;
 
   useEffect(() => {
     requestNotificationPermission();
@@ -150,8 +150,14 @@ export default function WorkoutScreen() {
       if (restEndTime.current !== null) {
         const remaining = Math.ceil((restEndTime.current - Date.now()) / 1000);
         if (remaining <= 0) {
-          setRestSeconds(null);
-          restEndTime.current = null;
+          Animated.timing(restAnim, {
+            toValue: -200,
+            duration: 250,
+            useNativeDriver: true,
+          }).start(() => {
+            setRestSeconds(null);
+            restEndTime.current = null;
+          });
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           Vibration.vibrate([0, 400, 200, 400]);
         } else {
@@ -167,11 +173,24 @@ export default function WorkoutScreen() {
     setRestTotal(seconds);
     setRestSeconds(seconds);
     scheduleRestNotification(seconds);
+    restAnim.setValue(-100);
+    Animated.spring(restAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 50,
+      friction: 8,
+    }).start();
   }
 
   function skipRest() {
-    setRestSeconds(null);
-    restEndTime.current = null;
+    Animated.timing(restAnim, {
+      toValue: -200,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setRestSeconds(null);
+      restEndTime.current = null;
+    });
     cancelRestNotification();
   }
 
@@ -186,7 +205,31 @@ export default function WorkoutScreen() {
     });
   }
 
-  function handleStart() {
+  async function handleStart() {
+    const active = await getActiveWorkout();
+    if (active && active.routineId !== routine.id) {
+      Alert.alert(
+        'Treino em andamento',
+        'Você já tem um treino em andamento. O que deseja fazer?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Continuar treino atual',
+            onPress: () => navigation.goBack(),
+          },
+          {
+            text: 'Descartar e iniciar novo',
+            style: 'destructive',
+            onPress: async () => {
+              await clearActiveWorkout();
+              startTime.current = Date.now();
+              setStarted(true);
+            },
+          },
+        ]
+      );
+      return;
+    }
     startTime.current = Date.now();
     setStarted(true);
   }
@@ -292,7 +335,7 @@ export default function WorkoutScreen() {
         text: 'Remover',
         style: 'destructive',
         onPress: () => {
-          setIsDirty(true);
+          if (!started) setIsDirty(true);
           setExercises((prev) => prev.filter((_, i) => i !== exerciseIndex));
         },
       },
@@ -391,7 +434,7 @@ export default function WorkoutScreen() {
   const restProgress = restSeconds !== null && restTotal > 0 ? restSeconds / restTotal : 0;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + spacing.lg }]}>
       {!started && (
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Text style={styles.backButtonText}>← Voltar</Text>
@@ -400,14 +443,12 @@ export default function WorkoutScreen() {
 
       <View style={styles.topBar}>
         <Text style={styles.routineTitle} numberOfLines={1}>{routine.name}</Text>
-          {started ? (
+        {started ? (
           <TouchableOpacity style={styles.finishButton} onPress={handleFinish}>
             <Text style={styles.finishButtonText}>Finalizar</Text>
           </TouchableOpacity>
         ) : isDirty ? (
-          <TouchableOpacity style={styles.saveRoutineButtonInline} onPress={async () => {
-            await handleSaveRoutine();
-          }}>
+          <TouchableOpacity style={styles.saveRoutineButtonInline} onPress={handleSaveRoutine}>
             <Text style={styles.saveRoutineButtonInlineText}>Salvar</Text>
           </TouchableOpacity>
         ) : (
@@ -423,149 +464,141 @@ export default function WorkoutScreen() {
         <Text style={styles.routineSubtitle}>{routine.subtitle}</Text>
       )}
 
-      {restSeconds !== null && (
-        <View style={styles.restBanner}>
-          <View style={styles.restBannerContent}>
-            <TouchableOpacity style={styles.restAdjustButton} onPress={() => adjustRest(-15)}>
-              <Text style={styles.restAdjustText}>−15s</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={skipRest} style={styles.restCenter}>
-              <Text style={styles.restLabel}>Descanso</Text>
-              <Text style={styles.restTimer}>{formatTime(restSeconds)}</Text>
-              <Text style={styles.restSkip}>Toque para pular</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.restAdjustButton} onPress={() => adjustRest(15)}>
-              <Text style={styles.restAdjustText}>+15s</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.restProgressBar}>
-            <View style={[styles.restProgressFill, { width: `${restProgress * 100}%` }]} />
-          </View>
-        </View>
-      )}
-
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        {exercises.map((ex, exerciseIndex) => {
-          const lastSets = getLastSets(ex.exercise.id);
-          const exerciseTemplate = EXERCISES.find((t) => t.id === ex.exercise.id);
-          const imageUrl = exerciseTemplate?.imageUrl;
-          const unit = ex.exercise.unit ?? 'kg';
-          return (
-            <View key={ex.exercise.id + exerciseIndex} style={styles.exerciseCard}>
-              <View style={styles.exerciseHeader}>
-                {imageUrl ? (
-                  <TouchableOpacity onPress={() => setImageModalUrl(imageUrl)} style={styles.exerciseThumbnail}>
-                    <Image
-                      source={{ uri: imageUrl }}
-                      style={styles.exerciseThumbnailImage}
-                      resizeMode="contain"
-                    />
-                  </TouchableOpacity>
-                ) : (
-                  <View style={[styles.exerciseThumbnail, styles.exerciseThumbnailPlaceholder]} />
-                )}
-                <Text style={styles.exerciseName}>{ex.exercise.name}</Text>
-                {!started && (
+      <View style={{ flex: 1, overflow: 'hidden', backgroundColor: colors.background }}>
+        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+          {exercises.map((ex, exerciseIndex) => {
+            const lastSets = getLastSets(ex.exercise.id);
+            const exerciseTemplate = EXERCISES.find((t) => t.id === ex.exercise.id);
+            const imageUrl = exerciseTemplate?.imageUrl;
+            const unit = ex.exercise.unit ?? 'kg';
+            return (
+              <View key={ex.exercise.id + exerciseIndex} style={styles.exerciseCard}>
+                <View style={styles.exerciseHeader}>
+                  {imageUrl ? (
+                    <TouchableOpacity onPress={() => setImageModalUrl(imageUrl)} style={styles.exerciseThumbnail}>
+                      <Image source={{ uri: imageUrl }} style={styles.exerciseThumbnailImage} resizeMode="contain" />
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={[styles.exerciseThumbnail, styles.exerciseThumbnailPlaceholder]} />
+                  )}
+                  <Text style={styles.exerciseName}>{ex.exercise.name}</Text>
                   <TouchableOpacity onPress={() => removeExercise(exerciseIndex)}>
                     <Text style={styles.removeExerciseButton}>Remover</Text>
                   </TouchableOpacity>
-                )}
-              </View>
-
-              {ex.exercise.notes && (
-                <Text style={styles.exerciseNotes}>{ex.exercise.notes}</Text>
-              )}
-
-              {!started && (
-                <View style={styles.restRow}>
-                  <Text style={styles.restRowLabel}>Descanso (seg)</Text>
-                  <TextInput
-                    style={styles.restRowInput}
-                    value={String(ex.exercise.restSeconds)}
-                    onChangeText={(v) => updateRestSeconds(exerciseIndex, v)}
-                    keyboardType="numeric"
-                    selectTextOnFocus
-                  />
                 </View>
-              )}
 
-              <View style={styles.setsHeader}>
-                <Text style={styles.setsHeaderText}>Série</Text>
-                {started && <Text style={[styles.setsHeaderText, styles.previousHeader]}>Anterior</Text>}
-                <TouchableOpacity style={{ flex: 1 }} onPress={() => toggleUnit(exerciseIndex)}>
-                  <Text style={[styles.setsHeaderText, styles.unitHeaderButton]}>
-                    {unit === 'lbs' ? 'Lbs ↕' : 'Kg ↕'}
-                  </Text>
-                </TouchableOpacity>
-                <Text style={styles.setsHeaderText}>Reps</Text>
-                <Text style={styles.setsHeaderText}>{started ? 'Feito' : ''}</Text>
-              </View>
+                {ex.exercise.notes && (
+                  <Text style={styles.exerciseNotes}>{ex.exercise.notes}</Text>
+                )}
 
-              {ex.completedSets.map((set, setIndex) => {
-                const last = lastSets?.[setIndex];
-                return (
-                  <SwipeableRow
-                    key={setIndex}
-                    onDelete={() => removeSet(exerciseIndex, setIndex)}
-                  >
-                    <View style={[styles.setRow, set.completed && styles.setRowCompleted]}>
-                      <Text style={styles.setNumber}>{set.setNumber}</Text>
-                      {started && (
-                        <Text style={styles.previousValue}>
-                          {last ? `${last.weight}×${last.reps}` : '—'}
-                        </Text>
-                      )}
-                      <TextInput
-                        style={styles.input}
-                        value={String(set.weight)}
-                        onChangeText={(v) => updateSet(exerciseIndex, setIndex, 'weight', v)}
-                        keyboardType="numeric"
-                        selectTextOnFocus
-                      />
-                      <TextInput
-                        style={styles.input}
-                        value={String(set.reps)}
-                        onChangeText={(v) => updateSet(exerciseIndex, setIndex, 'reps', v)}
-                        keyboardType="numeric"
-                        selectTextOnFocus
-                      />
-                      {started ? (
-                        <TouchableOpacity
-                          style={styles.checkButton}
-                          onPress={() => toggleSet(exerciseIndex, setIndex)}
-                        >
-                          <Text style={styles.checkButtonText}>
-                            {set.completed ? '✓' : '○'}
+                {!started && (
+                  <View style={styles.restRow}>
+                    <Text style={styles.restRowLabel}>Descanso (seg)</Text>
+                    <TextInput
+                      style={styles.restRowInput}
+                      value={String(ex.exercise.restSeconds)}
+                      onChangeText={(v) => updateRestSeconds(exerciseIndex, v)}
+                      keyboardType="numeric"
+                      selectTextOnFocus
+                    />
+                  </View>
+                )}
+
+                <View style={styles.setsHeader}>
+                  <Text style={styles.setsHeaderText}>Série</Text>
+                  <TouchableOpacity style={{ flex: 1 }} onPress={() => toggleUnit(exerciseIndex)}>
+                    <Text style={[styles.setsHeaderText, styles.unitHeaderButton]}>
+                      {unit === 'lbs' ? 'Lbs ▾' : 'Kg ▾'}
+                    </Text>
+                  </TouchableOpacity>
+                  <Text style={styles.setsHeaderText}>Reps</Text>
+                  <Text style={styles.setsHeaderText}>Volume</Text>
+                </View>
+
+                {ex.completedSets.map((set, setIndex) => {
+                  const last = lastSets?.[setIndex];
+                  return (
+                    <SwipeableRow
+                      key={setIndex}
+                      onDelete={() => removeSet(exerciseIndex, setIndex)}
+                    >
+                      <View style={[styles.setRow, set.completed && styles.setRowCompleted]}>
+                        <Text style={styles.setNumber}>{set.setNumber}</Text>
+                        {started && (
+                          <Text style={styles.previousValue}>
+                            {last ? `${last.weight}×${last.reps}` : '—'}
                           </Text>
-                        </TouchableOpacity>
-                      ) : (
-                        <View style={{ flex: 1 }} />
-                      )}
-                    </View>
-                  </SwipeableRow>
-                );
-              })}
+                        )}
+                        <TextInput
+                          style={styles.input}
+                          value={String(set.weight)}
+                          onChangeText={(v) => updateSet(exerciseIndex, setIndex, 'weight', v)}
+                          keyboardType="numeric"
+                          selectTextOnFocus
+                        />
+                        <TextInput
+                          style={styles.input}
+                          value={String(set.reps)}
+                          onChangeText={(v) => updateSet(exerciseIndex, setIndex, 'reps', v)}
+                          keyboardType="numeric"
+                          selectTextOnFocus
+                        />
+                        {started ? (
+                          <TouchableOpacity
+                            style={styles.checkButton}
+                            onPress={() => toggleSet(exerciseIndex, setIndex)}
+                          >
+                            <Text style={styles.checkButtonText}>
+                              {set.completed ? '✓' : '○'}
+                            </Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <View style={{ flex: 1 }} />
+                        )}
+                      </View>
+                    </SwipeableRow>
+                  );
+                })}
 
-              <View style={styles.setActions}>
-                <TouchableOpacity style={styles.setActionButton} onPress={() => removeSet(exerciseIndex)}>
-                  <Text style={styles.setActionText}>− Remover série</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.setActionButton} onPress={() => addSet(exerciseIndex)}>
-                  <Text style={styles.setActionTextGreen}>+ Adicionar série</Text>
-                </TouchableOpacity>
+                <View style={styles.setActions}>
+                  <TouchableOpacity style={styles.setActionButton} onPress={() => addSet(exerciseIndex)}>
+                    <Text style={styles.setActionTextGreen}>+ Adicionar série</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
+            );
+          })}
+
+          {deletable && !started && (
+            <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+              <Text style={styles.deleteButtonText}>Deletar treino</Text>
+            </TouchableOpacity>
+          )}
+
+          <View style={{ height: 40 }} />
+        </ScrollView>
+
+        {restSeconds !== null && (
+          <Animated.View style={[styles.restBanner, { transform: [{ translateY: restAnim }] }]}>
+            <View style={styles.restBannerContent}>
+              <TouchableOpacity style={styles.restAdjustButton} onPress={() => adjustRest(-15)}>
+                <Text style={styles.restAdjustText}>−15s</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={skipRest} style={styles.restCenter}>
+                <Text style={styles.restLabel}>Descanso</Text>
+                <Text style={styles.restTimer}>{formatTime(restSeconds)}</Text>
+                <Text style={styles.restSkip}>Toque para pular</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.restAdjustButton} onPress={() => adjustRest(15)}>
+                <Text style={styles.restAdjustText}>+15s</Text>
+              </TouchableOpacity>
             </View>
-          );
-        })}
-
-        {deletable && !started && (
-          <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-            <Text style={styles.deleteButtonText}>Deletar treino</Text>
-          </TouchableOpacity>
+            <View style={styles.restProgressBar}>
+              <View style={[styles.restProgressFill, { width: `${restProgress * 100}%` }]} />
+            </View>
+          </Animated.View>
         )}
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
+      </View>
 
       <Modal visible={!!imageModalUrl} transparent animationType="fade">
         <TouchableOpacity
@@ -639,14 +672,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: spacing.screenTop,
     paddingHorizontal: spacing.screenHorizontal,
   },
   backButton: {
-    marginBottom: 4,
+    marginBottom: spacing.lg,
+    backgroundColor: colors.background,
+    zIndex: 30,
   },
   backButtonText: {
-    ...typography.small,
+    ...typography.label,
     color: colors.textSubtle,
   },
   topBar: {
@@ -654,6 +688,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 0,
+    backgroundColor: colors.background,
+    zIndex: 30,
   },
   routineTitle: {
     ...typography.appTitle,
@@ -667,6 +703,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
     marginBottom: spacing.lg,
+    backgroundColor: colors.background,
+    zIndex: 30,
   },
   routineSubtitle: {
     ...typography.small,
@@ -689,13 +727,16 @@ const styles = StyleSheet.create({
   },
   startButtonTopText: { ...typography.small, color: '#000', fontWeight: '600' },
   restBanner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
     backgroundColor: colors.primaryDim,
     borderRadius: 12,
     padding: spacing.lg,
-    marginBottom: spacing.lg,
     borderWidth: 0.5,
     borderColor: colors.primaryBorder,
-    overflow: 'hidden',
   },
   restBannerContent: {
     flexDirection: 'row',
@@ -765,14 +806,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: spacing.sm,
-    marginTop: spacing.md,
     paddingHorizontal: spacing.xs,
   },
-  setsHeaderText: { ...typography.tiny, color: colors.textSubtle, flex: 1, textAlign: 'center' },
-  previousHeader: { flex: 1.5 },
-  unitHeaderButton: {
-    color: colors.primary,
-    fontWeight: '600',
+  setsHeaderText: { 
+    ...typography.tiny, 
+    color: colors.textSubtle, 
+    flex: 1, 
+    textAlign: 'center',
+    paddingHorizontal: spacing.xs,
   },
   setRow: {
     flexDirection: 'row',
@@ -801,26 +842,27 @@ const styles = StyleSheet.create({
   checkButtonText: { fontSize: 22, color: colors.primary },
   setActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     marginTop: spacing.sm,
     paddingTop: spacing.sm,
     borderTopWidth: 0.5,
     borderTopColor: colors.border,
   },
   setActionButton: { paddingVertical: 6, paddingHorizontal: spacing.xs },
-  setActionText: { ...typography.small, color: colors.textSubtle },
   setActionTextGreen: { ...typography.small, color: colors.primary },
-  saveRoutineButton: {
-    backgroundColor: colors.primaryDim,
+  saveRoutineButtonInline: {
+    backgroundColor: colors.surface,
     borderWidth: 0.5,
     borderColor: colors.primaryBorder,
-    borderRadius: 12,
-    paddingVertical: spacing.lg,
-    alignItems: 'center',
-    marginTop: spacing.sm,
-    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: 8,
   },
-  saveRoutineButtonText: { ...typography.label, color: colors.primary },
+  saveRoutineButtonInlineText: {
+    ...typography.small,
+    color: colors.primary,
+    fontWeight: '600',
+  },
   deleteButton: {
     backgroundColor: colors.dangerDim,
     borderWidth: 0.5,
@@ -913,17 +955,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   skipButtonText: { ...typography.small, color: colors.textSubtle },
-  saveRoutineButtonInline: {
-    backgroundColor: colors.surface,
-    borderWidth: 0.5,
-    borderColor: colors.primaryBorder,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: 8,
-  },
-  saveRoutineButtonInlineText: {
-    ...typography.small,
-    color: colors.primary,
-    fontWeight: '600',
-  },
 });

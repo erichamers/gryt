@@ -11,7 +11,6 @@ import { DMMono_400Regular, DMMono_500Medium } from '@expo-google-fonts/dm-mono'
 import RootTabs from './src/navigation/RootTabs';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useEffect, useState } from 'react';
-import { seedTestSession, seedDefaultRoutines } from './src/data/storage';
 import { supabase } from './src/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import LoginScreen from './src/screens/LoginScreen';
@@ -46,8 +45,6 @@ export default function App() {
 
   useEffect(() => {
     if (session) {
-      seedDefaultRoutines();
-      seedTestSession();
       syncFromSupabase().then(() => syncToSupabase());
     }
   }, [session]);

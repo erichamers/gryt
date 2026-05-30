@@ -57,6 +57,7 @@ export async function updateSession(session: WorkoutSession): Promise<void> {
     const sessions = await getSessions();
     const updated = sessions.map((s) => (s.id === session.id ? session : s));
     await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(updated));
+    syncToSupabase().catch(console.error);
   } catch (e) {
     console.error('Erro ao atualizar sessão:', e);
   }
@@ -193,101 +194,4 @@ export async function getWorkloadMetrics(): Promise<WorkloadMetrics> {
     chronicLoad: Math.round(chronicLoad),
     ratio: Math.round(ratio * 100) / 100,
   };
-}
-
-export async function seedDefaultRoutines(): Promise<void> {
-  const seeded = await AsyncStorage.getItem(SEED_KEY);
-  if (seeded) return;
-
-  const existing = await getUserRoutines();
-  const defaults: UserRoutine[] = ROUTINES.map((r) => ({
-    id: r.id,
-    name: r.name,
-    subtitle: r.subtitle,
-    createdAt: new Date().toISOString(),
-    exercises: r.exercises.map((ex) => ({
-      exerciseTemplateId: ex.id,
-      name: ex.name,
-      sets: Array.from({ length: ex.sets }, () => ({
-        weight: ex.weight,
-        reps: parseInt(ex.reps) || 0,
-        restSeconds: ex.restSeconds,
-      })),
-      notes: ex.notes,
-    })),
-  }));
-
-  await AsyncStorage.setItem(USER_ROUTINES_KEY, JSON.stringify([...defaults, ...existing]));
-  await AsyncStorage.setItem(SEED_KEY, '1');
-}
-
-export async function seedTestSession(): Promise<void> {
-  const existing = await getSessions();
-  if (existing.some((s) => s.id === 'seed-treino-b-2')) return;
-
-  const session: WorkoutSession = {
-    id: 'seed-treino-b-2',
-    routineId: 'treino-b',
-    routineName: 'Treino B',
-    date: new Date().toISOString(),
-    durationSeconds: 42 * 60,
-    rpe: 4,
-    exercises: [
-      {
-        exercise: { id: 'ex-021', name: 'Romanian Deadlift (Barbell)', sets: 2, reps: '6', weight: 110, restSeconds: 150 },
-        completedSets: [
-          { setNumber: 1, weight: 110, reps: 6, completed: true },
-          { setNumber: 2, weight: 110, reps: 6, completed: true },
-        ],
-      },
-      {
-        exercise: { id: 'ex-014', name: 'Lat Pulldown (Cable)', sets: 2, reps: '10', weight: 65, restSeconds: 105 },
-        completedSets: [
-          { setNumber: 1, weight: 65, reps: 10, completed: true },
-          { setNumber: 2, weight: 65, reps: 10, completed: true },
-        ],
-      },
-      {
-        exercise: { id: 'ex-017', name: 'Dumbbell Row', sets: 2, reps: '10', weight: 30, restSeconds: 90 },
-        completedSets: [
-          { setNumber: 1, weight: 30, reps: 10, completed: true },
-          { setNumber: 2, weight: 30, reps: 10, completed: true },
-        ],
-      },
-      {
-        exercise: { id: 'ex-039', name: 'Bicep Curl (Barbell)', sets: 2, reps: '10', weight: 50, restSeconds: 90 },
-        completedSets: [
-          { setNumber: 1, weight: 50, reps: 10, completed: true },
-          { setNumber: 2, weight: 50, reps: 10, completed: true },
-        ],
-      },
-      {
-        exercise: { id: 'ex-048', name: 'Triceps Pushdown', sets: 2, reps: '10', weight: 70, restSeconds: 75 },
-        completedSets: [
-          { setNumber: 1, weight: 70, reps: 10, completed: true },
-          { setNumber: 2, weight: 70, reps: 10, completed: true },
-        ],
-      },
-      {
-        exercise: { id: 'ex-009', name: 'Butterfly (Pec Deck)', sets: 1, reps: '12', weight: 75, restSeconds: 75 },
-        completedSets: [
-          { setNumber: 1, weight: 75, reps: 12, completed: true },
-        ],
-      },
-      {
-        exercise: { id: 'ex-070', name: 'Seated Leg Curl (Machine)', sets: 1, reps: '15', weight: 65, restSeconds: 60 },
-        completedSets: [
-          { setNumber: 1, weight: 65, reps: 15, completed: true },
-        ],
-      },
-      {
-        exercise: { id: 'ex-080', name: 'Hip Abduction (Machine)', sets: 1, reps: '20', weight: 45, restSeconds: 60 },
-        completedSets: [
-          { setNumber: 1, weight: 45, reps: 20, completed: true },
-        ],
-      },
-    ],
-  };
-
-  await saveSession(session);
 }

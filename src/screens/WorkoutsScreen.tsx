@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useCallback } from 'react';
 import {
   StyleSheet,
@@ -17,6 +18,7 @@ import { WorkoutsStackParamList } from '../navigation/types';
 type WorkoutsNavProp = NativeStackNavigationProp<WorkoutsStackParamList, 'Workouts'>;
 
 export default function WorkoutsScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<WorkoutsNavProp>();
   const [userRoutines, setUserRoutines] = useState<UserRoutine[]>([]);
 
@@ -43,13 +45,14 @@ export default function WorkoutsScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + spacing.lg }]}>
       <Text style={styles.header}>Treinos</Text>
       <Text style={styles.subheader}>Qualo treino de hoje?</Text>
 
       <FlatList
         data={allRoutines}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => (
           <TouchableOpacity
@@ -89,7 +92,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: spacing.screenTop,
     paddingHorizontal: spacing.screenHorizontal,
   },
   header: { ...typography.appTitle, color: colors.text },

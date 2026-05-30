@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useCallback } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -39,6 +40,7 @@ function totalVolume(session: WorkoutSession): number {
 }
 
 export default function HistoryScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<HistoryNavProp>();
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
 
@@ -49,11 +51,15 @@ export default function HistoryScreen() {
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + 120 }]}>
       <Text style={styles.header}>Histórico</Text>
       <Text style={styles.subheader}>Seus treinos feitos</Text>
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scroll} 
+        contentContainerStyle={{ paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
+      >
         {sessions.length === 0 && <Text style={styles.empty}>Nenhum treino ainda.</Text>}
         {sessions.map((session) => (
           <TouchableOpacity
@@ -93,7 +99,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: spacing.screenTop,
     paddingHorizontal: spacing.screenHorizontal,
   },
   header: { ...typography.appTitle, color: colors.text },

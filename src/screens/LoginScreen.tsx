@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import Svg, { Text as SvgText, TSpan } from 'react-native-svg';
@@ -5,6 +6,7 @@ import { signInWithGoogle } from '../lib/auth';
 import { colors, spacing, typography } from '../theme';
 
 export default function LoginScreen() {
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
 
   async function handleGoogleSignIn() {
@@ -19,7 +21,7 @@ export default function LoginScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + spacing.lg }]}>
       <View style={styles.header}>
         <Svg width={200} height={56} viewBox="0 0 320 90">
           <SvgText
@@ -62,7 +64,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     paddingHorizontal: spacing.screenHorizontal,
     justifyContent: 'space-between',
-    paddingTop: 120,
     paddingBottom: 60,
   },
   header: {

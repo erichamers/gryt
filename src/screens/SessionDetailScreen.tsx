@@ -1,4 +1,6 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState } from 'react';
+import { Picker } from '@react-native-picker/picker';
 import {
   StyleSheet,
   Text,
@@ -81,6 +83,7 @@ function seriesByMuscleGroup(session: WorkoutSession): Record<string, number> {
 }
 
 export default function SessionDetailScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<SessionDetailNavProp>();
   const route = useRoute<SessionDetailRoute>();
   const { session } = route.params;
@@ -89,6 +92,9 @@ export default function SessionDetailScreen() {
     JSON.parse(JSON.stringify(session))
   );
   const [showRPEModal, setShowRPEModal] = useState(false);
+  const [showDurationModal, setShowDurationModal] = useState(false);
+  const [tempMinutes, setTempMinutes] = useState(Math.floor(editedSession.durationSeconds / 60));
+  const [tempSeconds, setTempSeconds] = useState(editedSession.durationSeconds % 60);
   const [tempRPE, setTempRPE] = useState(session.rpe ?? 5);
   const [exerciseUnits, setExerciseUnits] = useState<Record<number, 'kg' | 'lbs'>>({});
 
@@ -190,26 +196,36 @@ export default function SessionDetailScreen() {
     muscleGroupEntries.length > 0 ? Math.max(...muscleGroupEntries.map(([, s]) => s)) : 0;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + spacing.lg }]}>
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backButton}>← Voltar</Text>
         </TouchableOpacity>
+      </View>
+
+      <View style={styles.titleRow}>
+        <Text style={styles.header}>{editedSession.routineName}</Text>
         {isDirty && (
-          <TouchableOpacity onPress={handleSave}>
-            <Text style={styles.saveButton}>Salvar</Text>
+          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+            <Text style={styles.saveButtonText}>Salvar</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      <Text style={styles.header}>{editedSession.routineName}</Text>
-      <Text style={styles.subheader}>{formatDate(editedSession.date)}</Text>
-
       <View style={styles.statsRow}>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{formatDuration(editedSession.durationSeconds)}</Text>
+        <TouchableOpacity
+          style={styles.statItem}
+          onPress={() => {
+            setTempMinutes(Math.floor(editedSession.durationSeconds / 60));
+            setTempSeconds(editedSession.durationSeconds % 60);
+            setShowDurationModal(true);
+          }}
+        >
+          <Text style={[styles.statValue, { color: colors.primary }]}>
+            {formatDuration(editedSession.durationSeconds)}
+          </Text>
           <Text style={styles.statLabel}>Duração</Text>
-        </View>
+        </TouchableOpacity>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <Text style={styles.statValue}>
@@ -235,7 +251,11 @@ export default function SessionDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scroll} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 40 }}
+      >
         {muscleGroupEntries.length > 0 && (
           <View style={styles.muscleGroupSection}>
             <Text style={styles.muscleGroupTitle}>Séries por grupo muscular</Text>
@@ -264,14 +284,13 @@ export default function SessionDetailScreen() {
 
               <View style={styles.setsHeader}>
                 <Text style={styles.setsHeaderText}>Série</Text>
-                <TouchableOpacity style={{ flex: 1 }} onPress={() => toggleUnit(exerciseIndex)}>
-                  <Text style={[styles.setsHeaderText, styles.unitHeaderButton]}>
-                    {unit === 'lbs' ? 'Lbs ↕' : 'Kg ↕'}
+                <TouchableOpacity style={[{ flex: 1 }, { marginHorizontal: spacing.xs }]} onPress={() => toggleUnit(exerciseIndex)}>
+                  <Text style={[styles.setsHeaderText, styles.unitHeaderButton, { marginHorizontal: 0 }]}>
+                    {unit === 'lbs' ? 'Lbs ▾' : 'Kg ▾'}
                   </Text>
                 </TouchableOpacity>
-                <Text style={styles.setsHeaderText}>Reps</Text>
+                <Text style={[styles.setsHeaderText, { marginHorizontal: spacing.xs }]}>Reps</Text>
                 <Text style={styles.setsHeaderText}>Volume</Text>
-                <View style={{ width: 32 }} />
               </View>
 
               {ex.completedSets.map((set, setIndex) => (
@@ -319,6 +338,55 @@ export default function SessionDetailScreen() {
         </TouchableOpacity>
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <Modal visible={showDurationModal} transparent animationType="slide">
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowDurationModal(false)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalTitle}>Duração do treino</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+                <Picker
+                  selectedValue={tempMinutes}
+                  onValueChange={(v) => setTempMinutes(v)}
+                  style={{ width: 120, color: colors.text }}
+                  itemStyle={{ color: colors.text }}
+                >
+                  {Array.from({ length: 300 }, (_, i) => (
+                    <Picker.Item key={i} label={`${i} min`} value={i} />
+                  ))}
+                </Picker>
+                <Text style={{ color: colors.text, fontSize: 24 }}>:</Text>
+                <Picker
+                  selectedValue={tempSeconds}
+                  onValueChange={(v) => setTempSeconds(v)}
+                  style={{ width: 120, color: colors.text }}
+                  itemStyle={{ color: colors.text }}
+                >
+                  {Array.from({ length: 60 }, (_, i) => (
+                    <Picker.Item key={i} label={`${i} seg`} value={i} />
+                  ))}
+                </Picker>
+              </View>
+              <TouchableOpacity
+                style={styles.confirmButton}
+                onPress={() => {
+                  setEditedSession({
+                    ...editedSession,
+                    durationSeconds: tempMinutes * 60 + tempSeconds,
+                  });
+                  setShowDurationModal(false);
+                }}
+              >
+                <Text style={styles.confirmButtonText}>Confirmar</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>  
 
       <Modal visible={showRPEModal} transparent animationType="slide">
         <TouchableOpacity
@@ -368,7 +436,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: spacing.screenTop,
     paddingHorizontal: spacing.screenHorizontal,
   },
   topBar: {
@@ -378,7 +445,19 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   backButton: { ...typography.label, color: colors.textSubtle },
-  saveButton: { ...typography.label, color: colors.primary, fontWeight: '600' },
+  saveButton: {
+    backgroundColor: colors.surface,
+    borderWidth: 0.5,
+    borderColor: colors.primaryBorder,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: 8,
+  },
+  saveButtonText: {
+    ...typography.small,
+    color: colors.primary,
+    fontWeight: '600',
+  },
   header: { ...typography.appTitle, color: colors.text },
   subheader: {
     ...typography.small,
@@ -573,5 +652,11 @@ const styles = StyleSheet.create({
     color: colors.textSubtle,
     marginTop: 2,
     textAlign: 'center',
+  },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
   },
 });

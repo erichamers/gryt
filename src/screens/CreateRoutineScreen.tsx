@@ -196,7 +196,7 @@ export default function CreateRoutineScreen() {
             </View>
 
             <View style={styles.setsHeader}>
-              <Text style={styles.setsHeaderText}>Série</Text>
+              <View style={{ width: 20 }} />
               <Text style={styles.setsHeaderText}>Kg</Text>
               <Text style={styles.setsHeaderText}>Reps</Text>
               <Text style={styles.setsHeaderText}>Descanso</Text>
@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.xxl,
   },
-  backButton: { ...typography.label, color: colors.textSubtle, width: 60 },
+  backButton: { ...typography.label, color: colors.textSubtle },
   screenTitle: { ...typography.label, color: colors.text },
   saveButton: { ...typography.label, color: colors.primary, fontWeight: '600', width: 60, textAlign: 'right' },
   scroll: { flex: 1 },
